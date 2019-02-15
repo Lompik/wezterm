@@ -6,7 +6,7 @@ use glium::texture::{SrgbTexture2d, Texture2dDataSource};
 use glium::{self, Rect};
 use std::rc::Rc;
 
-pub const TEX_SIZE: u32 = 4096;
+pub const TEX_SIZE: u32 = 256;
 
 #[derive(Debug, Fail)]
 #[fail(display = "Texture Size exceeded, need {}", size)]

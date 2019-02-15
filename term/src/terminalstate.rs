@@ -115,6 +115,56 @@ impl ScreenOrAlt {
     }
 }
 
+#[derive(Clone)]
+enum Charset{
+    Ascii,
+    SpecialCharacterAndLineDrawing
+}
+
+impl Charset {
+    fn map(&self, c: char) -> char {
+        match self{
+            Charset::Ascii => c,
+            Charset::SpecialCharacterAndLineDrawing => {
+                match c {
+                    '`' => '◆',
+                    'a' => '▒',
+                    'b' => '\t',
+                    'c' => '\u{000c}',
+                    'd' => '\r',
+                    'e' => '\n',
+                    'f' => '°',
+                    'g' => '±',
+                    'h' => '\u{2424}',
+                    'i' => '\u{000b}',
+                    'j' => '┘',
+                    'k' => '┐',
+                    'l' => '┌',
+                    'm' => '└',
+                    'n' => '┼',
+                    'o' => '⎺',
+                    'p' => '⎻',
+                    'q' => '─',
+                    'r' => '⎼',
+                    's' => '⎽',
+                    't' => '├',
+                    'u' => '┤',
+                    'v' => '┴',
+                    'w' => '┬',
+                    'x' => '│',
+                    'y' => '≤',
+                    'z' => '≥',
+                    '{' => 'π',
+                    '|' => '≠',
+                    '}' => '£',
+                    '~' => '·',
+                    _ => c
+                }
+            }
+        }
+    }
+}
+
 pub struct TerminalState {
     screen: ScreenOrAlt,
     /// The current set of attributes in effect for the next
@@ -180,6 +230,8 @@ pub struct TerminalState {
 
     /// The terminal title string
     title: String,
+
+    active_charset: Charset
 }
 
 /// Like Write::write_all except that we keep looping
@@ -235,6 +287,7 @@ impl TerminalState {
             tabs: TabStop::new(physical_cols, 8),
             hyperlink_rules,
             title: "wezterm".to_string(),
+            active_charset: Charset::Ascii
         }
     }
 
@@ -1769,7 +1822,6 @@ impl<'a> Performer<'a> {
         //use std::iter::FromIterator;
         let width = self.screen().physical_cols;
         //let s = String::from_iter(p);
-
         if self.screen.is_alt_screen_active() {
         let mut it = p.iter();
         while let Some(mut g) = it.next()  //unicode_segmentation::UnicodeSegmentation::graphemes(s.as_str(), true).map(|x| x.chars()).flatten()
@@ -1779,6 +1831,7 @@ impl<'a> Performer<'a> {
                 self.wrap_next = false;
             }
 
+            let active_charset = &self.active_charset.clone();
             let y = self.cursor.y;
             let mut x = self.cursor.x;
 
@@ -1792,7 +1845,7 @@ impl<'a> Performer<'a> {
             while x+print_width < width && has_next{
                 x+=print_width;
                 let (_, pw) = line
-                    .update_or_set_cell(x, *g, pen.clone());
+                    .update_or_set_cell(x, active_charset.map(*g), pen.clone());
                 print_width = pw;
                 if let Some(g1) = it.next(){
                     g = g1;
@@ -1863,6 +1916,8 @@ impl<'a> Performer<'a> {
             }
             ControlCode::HorizontalTab => self.c0_horizontal_tab(),
             ControlCode::Bell => eprintln!("Ding! (this is the bell)"),
+            ControlCode::ShiftOut => self.active_charset = Charset::SpecialCharacterAndLineDrawing,
+            ControlCode::ShiftIn => dbg!(self.active_charset = Charset::Ascii),
             _ => println!("unhandled ControlCode {:?}", control),
         }
     }
@@ -1901,8 +1956,8 @@ impl<'a> Performer<'a> {
             Esc::Code(EscCode::Index) => self.c1_index(),
             Esc::Code(EscCode::NextLine) => self.c1_nel(),
             Esc::Code(EscCode::HorizontalTabSet) => self.c1_hts(),
-            Esc::Code(EscCode::DecLineDrawing) => debug!("ESC: smacs/DecLineDrawing"),
-            Esc::Code(EscCode::AsciiCharacterSet) => debug!("ESC: rmacs/AsciiCharacterSet"),
+            Esc::Code(EscCode::DecLineDrawing) => self.active_charset = Charset::SpecialCharacterAndLineDrawing,
+            Esc::Code(EscCode::AsciiCharacterSet) => self.active_charset = Charset::Ascii,
             Esc::Code(EscCode::DecSaveCursorPosition) => self.save_cursor(),
             Esc::Code(EscCode::DecRestoreCursorPosition) => self.restore_cursor(),
             _ => println!("ESC: unhandled {:?}", esc),

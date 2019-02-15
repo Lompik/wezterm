@@ -200,6 +200,8 @@ pub struct TerminalState {
     current_mouse_button: MouseButton,
     mouse_position: CursorPosition,
     cursor_visible: bool,
+    linewrap: bool,
+    lf_nl: bool,
 
     /// Which hyperlink is considered to be highlighted, because the
     /// mouse_position is over a cell with a Hyperlink attribute.
@@ -287,7 +289,9 @@ impl TerminalState {
             tabs: TabStop::new(physical_cols, 8),
             hyperlink_rules,
             title: "wezterm".to_string(),
-            active_charset: Charset::USAscii
+            active_charset: Charset::USAscii,
+            linewrap: true,
+            lf_nl: false,
         }
     }
 
@@ -520,7 +524,7 @@ impl TerminalState {
                                     self.selection_range = Some(SelectionRange { start, end });
                                     self.dirty_selection_lines();
                                     let text = self.get_selection_text();
-                                    debug!(
+                                    trace!(
                                         "finish 2click selection {:?} '{}'",
                                         self.selection_range, text
                                     );
@@ -544,7 +548,7 @@ impl TerminalState {
                             });
                             self.dirty_selection_lines();
                             let text = self.get_selection_text();
-                            debug!(
+                            trace!(
                                 "finish 3click selection {:?} '{}'",
                                 self.selection_range, text
                             );
@@ -576,7 +580,7 @@ impl TerminalState {
                         // The double/triple click cases are handled above.
                         let text = self.get_selection_text();
                         if !text.is_empty() {
-                            debug!(
+                            trace!(
                                 "finish drag selection {:?} '{}'",
                                 self.selection_range, text
                             );
@@ -1142,7 +1146,8 @@ impl TerminalState {
                 self.screen_mut().line_at(y).resize_and_clear(width);
             }
         }
-        self.viewport_offset = dbg!(position);
+        trace!("{}: position:{}", "set_scroll_viewport", position);
+        self.viewport_offset = position;
         let top = self.screen().hlines.len() - (rows + position as usize);
         {
             let screen = self.screen_mut();
@@ -1371,6 +1376,7 @@ impl TerminalState {
     }
 
     fn perform_device(&mut self, dev: Device, host: &mut TerminalHost) {
+        trace!(target: "perform_device", "perform_device: {}", dev);
         match dev {
             Device::DeviceAttributes(a) => eprintln!("unhandled: {:?}", a),
             Device::SoftReset => {
@@ -1390,6 +1396,7 @@ impl TerminalState {
     }
 
     fn perform_csi_mode(&mut self, mode: Mode) {
+        trace!(target: "perform_csi_mode", "mode: {:?}", mode);
         match mode {
             Mode::SetDecPrivateMode(DecPrivateMode::Code(
                 DecPrivateModeCode::StartBlinkingCursor,
@@ -1474,10 +1481,28 @@ impl TerminalState {
                     self.set_scroll_viewport(0);
                 }
             }
+            Mode::SetDecPrivateMode(DecPrivateMode::Code(DecPrivateModeCode::LineWrap))
+              => {
+                self.linewrap = true;
+              }
+            Mode::ResetDecPrivateMode(DecPrivateMode::Code(DecPrivateModeCode::LineWrap))
+              => {
+                self.linewrap = false;
+              }
+            Mode::SetDecPrivateMode(DecPrivateMode::Code(DecPrivateModeCode::LineFeedNewLine))
+              => {
+                self.lf_nl = true;
+              }
+            Mode::ResetDecPrivateMode(DecPrivateMode::Code(DecPrivateModeCode::LineFeedNewLine))
+              => {
+                self.lf_nl = false;
+              }
+
             Mode::SaveDecPrivateMode(DecPrivateMode::Code(_))
             | Mode::RestoreDecPrivateMode(DecPrivateMode::Code(_)) => {
                 eprintln!("save/restore dec mode unimplemented")
             }
+
 
             Mode::SetDecPrivateMode(DecPrivateMode::Unspecified(n))
             | Mode::ResetDecPrivateMode(DecPrivateMode::Unspecified(n))
@@ -1531,6 +1556,7 @@ impl TerminalState {
     }
 
     fn perform_csi_edit(&mut self, edit: Edit) {
+        trace!(target: "perform_csi_edit", "perform_csi_edit: {:?}", edit);
         match edit {
             Edit::DeleteCharacter(n) => {
                 let y = self.cursor.y;
@@ -1557,6 +1583,7 @@ impl TerminalState {
             Edit::EraseCharacter(n) => {
                 let y = self.cursor.y;
                 let x = self.cursor.x;
+                trace!(target: "perform_csi_edit", "Erase Character: {:?}", (self.cursor));
                 let limit = (x + n as usize).min(self.screen().physical_cols);
                 {
                     let screen = self.screen_mut();
@@ -1617,6 +1644,7 @@ impl TerminalState {
     }
 
     fn perform_csi_cursor(&mut self, cursor: Cursor, host: &mut TerminalHost) {
+        trace!(target: "perform_csi_cursor", "perform_csi_cursor: {:?}", cursor);
         match cursor {
             Cursor::SetTopAndBottomMargins { top, bottom } => {
                 let rows = self.screen().physical_rows;
@@ -1712,7 +1740,7 @@ impl TerminalState {
     }
 
     fn perform_csi_sgr(&mut self, sgr: Sgr) {
-        debug!("{:?}", sgr);
+        //trace!(target: "perform_csi_sgr", "{:?}", sgr);
         match sgr {
             Sgr::Reset => {
                 let link = self.pen.hyperlink.take();
@@ -1899,14 +1927,17 @@ impl<'a> Performer<'a> {
     fn print(&mut self, c: char) {
         // We buffer up the chars to increase the chances of correctly grouping graphemes into cells
         let size = self.screen().physical_cols;
+        //let c = self.active_charset.map(c);
         self.print.get_or_insert_with(|| Vec::with_capacity(size)).push(c);
     }
 
     fn control(&mut self, control: ControlCode) {
         self.flush_print();
+        trace!(target: "perform_control", "perform_control {:?}", control);
         match control {
             ControlCode::LineFeed | ControlCode::VerticalTab | ControlCode::FormFeed => {
-                self.new_line(true /* TODO: depend on terminal mode */)
+                let lf_nl = self.lf_nl;
+                self.new_line(lf_nl /* TODO: depend on terminal mode */)
             }
             ControlCode::CarriageReturn => {
                 self.set_cursor_pos(&Position::Absolute(0), &Position::Relative(0));
@@ -1945,11 +1976,11 @@ impl<'a> Performer<'a> {
                 // handled by vte::Parser
             }
             Esc::Code(EscCode::DecApplicationKeyPad) => {
-                debug!("DECKPAM on");
+                trace!("DECKPAM on");
                 self.application_keypad = true;
             }
             Esc::Code(EscCode::DecNormalKeyPad) => {
-                debug!("DECKPAM off");
+                trace!("DECKPAM off");
                 self.application_keypad = false;
             }
             Esc::Code(EscCode::ReverseIndex) => self.c1_reverse_index(),

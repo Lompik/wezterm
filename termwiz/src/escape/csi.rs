@@ -315,7 +315,9 @@ pub enum DecPrivateMode {
 #[derive(Debug, Clone, PartialEq, Eq, FromPrimitive, ToPrimitive)]
 pub enum DecPrivateModeCode {
     ApplicationCursorKeys = 1,
+    LineWrap = 7,
     StartBlinkingCursor = 12,
+    LineFeedNewLine = 20,
     ShowCursor = 25,
     /// Enable mouse button press/release reporting
     MouseTracking = 1000,

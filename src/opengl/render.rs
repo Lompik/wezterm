@@ -826,7 +826,7 @@ impl Renderer {
                 let cell_idx = cluster.byte_to_cell_idx[info.cluster as usize];
                 let glyph = self.cached_glyph(info, style)?;
 
-                let left: f32 = glyph.x_offset as f32 + glyph.bearing_x as f32;
+                let left: f32 = glyph.x_offset as f32 + glyph.bearing_x as f32 + info.x_offset as f32;
                 let top = (self.cell_height as f32 + self.descender as f32)
                     - (glyph.y_offset as f32 + glyph.bearing_y as f32);
 

@@ -55,6 +55,12 @@ impl LineHisto{
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ScreenType {
+    Primary, // with scrollback
+    Alternate
+}
+
 /// Holds the model of a screen.  This can either be the primary screen
 /// which includes lines of scrollback text, or the alternate screen
 /// which holds no scrollback.  The intent is to have one instance of
@@ -79,15 +85,21 @@ pub struct Screen {
     pub physical_rows: usize,
     /// Physical, visible width of the screen
     pub physical_cols: usize,
+
+    pub kind: ScreenType
 }
 
 impl Screen {
     /// Create a new Screen with the specified dimensions.
     /// The Cells in the viewable portion of the screen are set to the
     /// default cell attributes.
-    pub fn new(physical_rows: usize, physical_cols: usize, scrollback_size: usize) -> Screen {
+    pub fn new(physical_rows: usize, physical_cols: usize, scrollback_size: usize, kind: ScreenType) -> Screen {
         let mut lines = VecDeque::with_capacity(physical_rows);
-        let mut hlines = VecDeque::with_capacity(physical_rows + scrollback_size);
+        let cap = match kind {
+            ScreenType::Primary => physical_rows + scrollback_size,
+            ScreenType::Alternate => scrollback_size,
+        };
+        let mut hlines =  VecDeque::with_capacity(cap);
         for _ in 0..physical_rows {
             lines.push_back(Line::with_width(physical_cols));
         }
@@ -101,6 +113,7 @@ impl Screen {
             scrollback_size,
             physical_rows,
             physical_cols,
+            kind
         }
     }
 
@@ -269,7 +282,13 @@ impl Screen {
     #[inline]
     pub fn phys_row(&self, row: VisibleRowIndex) -> PhysRowIndex {
         assert!(row >= 0, "phys_row called with negative row {}", row);
-        (self.hlines.len() - self.physical_rows) + row as usize
+        match self.kind {
+            ScreenType::Primary => (self.hlines.len() - self.physical_rows) + row as usize,
+            ScreenType::Alternate => {
+                assert!(row < self.physical_rows as i64);
+                row as usize
+            }
+        }
     }
 
     /// Given a possibly negative row number, return the corresponding physical
@@ -464,16 +483,16 @@ impl Screen {
 
         // dirty the rows in the region
         for y in phys_scroll.start..middle {
-            self.line_mut(y).set_dirty();
+            self.hline_mut(y).set_dirty();
         }
 
         for _ in 0..num_rows {
-            self.lines.remove(middle);
+            self.hlines.remove(middle);
         }
 
         for _ in 0..num_rows {
-            self.lines
-                .insert(phys_scroll.start, Line::with_width(self.physical_cols));
+            self.hlines
+                .insert(phys_scroll.start, LineH::default());
         }
     }
 }

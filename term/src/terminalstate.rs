@@ -53,68 +53,6 @@ impl TabStop {
     }
 }
 
-struct ScreenOrAlt {
-    /// The primary screen + scrollback
-    screen: Screen,
-    /// The alternate screen; no scrollback
-    alt_screen: Screen,
-    /// Tells us which screen is active
-    alt_screen_is_active: bool,
-}
-
-impl Deref for ScreenOrAlt {
-    type Target = Screen;
-
-    fn deref(&self) -> &Screen {
-        match self.alt_screen_is_active {
-            true => &self.alt_screen,
-            false => &self.screen,
-        }
-    }
-}
-
-impl DerefMut for ScreenOrAlt {
-    fn deref_mut(&mut self) -> &mut Screen {
-        match self.alt_screen_is_active {
-            true => &mut self.alt_screen,
-            false => &mut self.screen,
-        }
-    }
-}
-
-impl ScreenOrAlt {
-    pub fn new(physical_rows: usize, physical_cols: usize, scrollback_size: usize) -> Self {
-        let screen = Screen::new(physical_rows, physical_cols, scrollback_size);
-        let alt_screen = Screen::new(physical_rows, physical_cols, 0);
-
-        Self {
-            screen,
-            alt_screen,
-            alt_screen_is_active: false,
-        }
-    }
-
-    pub fn resize(&mut self, physical_rows: usize, physical_cols: usize) {
-        self.screen.resize(physical_rows, physical_cols);
-        self.alt_screen.resize(physical_rows, physical_cols);
-    }
-
-    pub fn activate_alt_screen(&mut self) {
-        self.alt_screen_is_active = true;
-    }
-
-    pub fn activate_primary_screen(&mut self) {
-        for i in 0..self.screen.physical_rows{
-            self.screen.line_at(i).set_dirty();
-        }
-        self.alt_screen_is_active = false;
-    }
-
-    pub fn is_alt_screen_active(&self) -> bool {
-        self.alt_screen_is_active
-    }
-}
-
 #[derive(Clone)]
 enum Charset{
     USAscii,
@@ -1851,57 +1789,59 @@ impl<'a> Performer<'a> {
         let width = self.screen().physical_cols;
         //let s = String::from_iter(p);
         if self.screen.is_alt_screen_active() {
-        let mut it = p.iter();
-        while let Some(mut g) = it.next()  //unicode_segmentation::UnicodeSegmentation::graphemes(s.as_str(), true).map(|x| x.chars()).flatten()
-        {
-            if self.wrap_next {
-                self.new_line(true);
-                self.wrap_next = false;
-            }
+            let mut it = p.iter();
+            while let Some(mut g) = it.next()  //unicode_segmentation::UnicodeSegmentation::graphemes(s.as_str(), true).map(|x| x.chars()).flatten()
+            {
+                if self.wrap_next { // [TODO] handle self.linewrap
+                    self.new_line(true);
+                    self.wrap_next = false;
+                }
 
-            let active_charset = &self.active_charset.clone();
-            let y = self.cursor.y;
-            let mut x = self.cursor.x;
+                let active_charset = &self.active_charset.clone();
+                let y = self.cursor.y;
 
-            let mut print_width =0;
-            {let line = self.screen_mut().line_at(y as usize);
+                let mut x = self.cursor.x;
+                let mut print_width =0;
+                {
+                    let line = self.screen_mut().line_at(y as usize);
 
 
-            // Assign the cell and extract its printable width
+                    // Assign the cell and extract its printable width
 
-             let mut has_next = true;
-            while x+print_width < width && has_next{
-                x+=print_width;
-                let (_, pw) = line
-                    .update_or_set_cell(x, active_charset.map(*g), pen.clone());
-                print_width = pw;
-                if let Some(g1) = it.next(){
-                    g = g1;
-                } else {
-                    has_next=false;
-                };
-            }
-}                // the max(1) here is to ensure that we advance to the next cell
-             self.cursor.x = x;
+                    let mut has_next = true;
+                    while x+print_width < width && has_next{
+                        x+=print_width;
+                        let (_, pw) = line
+                            .update_or_set_cell(x, active_charset.map(*g), pen.clone());
+                        print_width = pw;
+                        if let Some(g1) = it.next(){
+                            g = g1;
+                        } else {
+                            has_next=false;
+                        };
+                    }
+                }                // the max(1) here is to ensure that we advance to the next cell
+                self.cursor.x = x;
                 // position for zero-width graphemes.  We want to make sure that
                 // they occupy a cell so that we can re-emit them when we output them.
                 // If we didn't do this, then we'd effectively filter them out from
                 // the model, which seems like a lossy design choice.
                 // cell.width().max(1)
                 // width
-            //};
+                //};
 
-            // self.clear_selection_if_intersects(
-            //     x..x + print_width,
-            //     y as ScrollbackOrVisibleRowIndex,
-            // );
+                // self.clear_selection_if_intersects(
+                //     x..x + print_width,
+                //     y as ScrollbackOrVisibleRowIndex,
+                // );
 
-            if x + print_width < width {
-                self.cursor.x += print_width;
-            } else {
-                self.wrap_next = true;
+                if x + print_width < width {
+                    self.cursor.x += print_width;
+                } else {
+                    self.wrap_next = true;
+                }
             }
-        }} else {
+        } else {
             let y = self.cursor.y;
             let x = self.cursor.x;
             let len = p.len();

@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::str;
 
 #[macro_use]
-mod debug;
+extern crate log;
 
 pub mod input;
 pub use crate::input::*;
@@ -21,6 +21,9 @@ pub use termwiz::surface::line::*;
 
 pub mod screen;
 pub use crate::screen::*;
+
+pub mod screens;
+pub use screens::*;
 
 pub mod selection;
 use crate::selection::{SelectionCoordinate, SelectionRange};

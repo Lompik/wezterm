@@ -117,14 +117,14 @@ impl ScreenOrAlt {
 
 #[derive(Clone)]
 enum Charset{
-    Ascii,
+    USAscii,
     SpecialCharacterAndLineDrawing
 }
 
 impl Charset {
     fn map(&self, c: char) -> char {
         match self{
-            Charset::Ascii => c,
+            Charset::USAscii => c,
             Charset::SpecialCharacterAndLineDrawing => {
                 match c {
                     '`' => '◆',
@@ -287,7 +287,7 @@ impl TerminalState {
             tabs: TabStop::new(physical_cols, 8),
             hyperlink_rules,
             title: "wezterm".to_string(),
-            active_charset: Charset::Ascii
+            active_charset: Charset::USAscii
         }
     }
 
@@ -1917,7 +1917,7 @@ impl<'a> Performer<'a> {
             ControlCode::HorizontalTab => self.c0_horizontal_tab(),
             ControlCode::Bell => eprintln!("Ding! (this is the bell)"),
             ControlCode::ShiftOut => self.active_charset = Charset::SpecialCharacterAndLineDrawing,
-            ControlCode::ShiftIn => dbg!(self.active_charset = Charset::Ascii),
+            ControlCode::ShiftIn => dbg!(self.active_charset = Charset::USAscii),
             _ => println!("unhandled ControlCode {:?}", control),
         }
     }
@@ -1957,7 +1957,7 @@ impl<'a> Performer<'a> {
             Esc::Code(EscCode::NextLine) => self.c1_nel(),
             Esc::Code(EscCode::HorizontalTabSet) => self.c1_hts(),
             Esc::Code(EscCode::DecLineDrawing) => self.active_charset = Charset::SpecialCharacterAndLineDrawing,
-            Esc::Code(EscCode::AsciiCharacterSet) => self.active_charset = Charset::Ascii,
+            Esc::Code(EscCode::AsciiCharacterSet) => self.active_charset = Charset::USAscii,
             Esc::Code(EscCode::DecSaveCursorPosition) => self.save_cursor(),
             Esc::Code(EscCode::DecRestoreCursorPosition) => self.restore_cursor(),
             _ => println!("ESC: unhandled {:?}", esc),

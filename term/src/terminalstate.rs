@@ -1680,12 +1680,32 @@ impl TerminalState {
     }
 }
 
+use termwiz::escape::{DeviceControlMode};
+use termwiz::{num, vte};
+
 /// A helper struct for implementing `vte::Perform` while compartmentalizing
 /// the terminal state and the embedding/host terminal interface
 pub(crate) struct Performer<'a> {
     pub state: &'a mut TerminalState,
     pub host: &'a mut TerminalHost,
-    print: Option<String>,
+    print: Option<Vec<char>>,
+}
+
+pub struct Parser {
+    pub state_machine: vte::Parser,
+}
+
+impl Parser {
+    pub fn new() -> Self {
+        Self {
+            state_machine: vte::Parser::new(),
+        }
+    }
+    pub fn parse<P: vte::Perform>(&mut self, bytes: &[u8], mut p:  P) {
+        for b in bytes {
+            self.state_machine.advance(&mut p, *b);
+        }
+    }
 }
 
 impl<'a> Deref for Performer<'a> {
@@ -1775,7 +1795,8 @@ impl<'a> Performer<'a> {
     /// Draw a character to the screen
     fn print(&mut self, c: char) {
         // We buffer up the chars to increase the chances of correctly grouping graphemes into cells
-        self.print.get_or_insert_with(String::new).push(c);
+        let size = self.screen().physical_cols;
+        self.print.get_or_insert_with(|| Vec::with_capacity(size)).push(c);
     }
 
     fn control(&mut self, control: ControlCode) {
@@ -1877,5 +1898,73 @@ impl<'a> Performer<'a> {
                 eprintln!("Application sends SystemNotification: {}", message);
             }
         }
+    }
+}
+
+impl<'a> vte::Perform for Performer<'a> {
+    fn print(&mut self, c: char) {
+        self.print(c);
+    }
+
+    fn execute(&mut self, byte: u8) {
+        match num::FromPrimitive::from_u8(byte) {
+            Some(code) => self.control(code),
+            None => eprintln!("impossible C0/C1 control code {:?} was dropped", byte),
+        }
+    }
+
+    fn hook(&mut self, params: &[i64], intermediates: &[u8], ignored_extra_intermediates: bool) {
+        self.perform(Action::DeviceControl(Box::new(DeviceControlMode::Enter {
+            params: params.to_vec(),
+            intermediates: intermediates.to_vec(),
+            ignored_extra_intermediates,
+        })));
+    }
+
+    fn put(&mut self, data: u8) {
+        self.perform(Action::DeviceControl(Box::new(DeviceControlMode::Data(
+            data,
+        ))));
+    }
+
+    fn unhook(&mut self) {
+        self.perform(Action::DeviceControl(Box::new(DeviceControlMode::Exit)));
+    }
+
+    fn osc_dispatch(&mut self, osc: &[&[u8]]) {
+        let osc = OperatingSystemCommand::parse(osc);
+        self.perform(Action::OperatingSystemCommand(Box::new(osc)));
+    }
+
+    fn csi_dispatch(
+        &mut self,
+        params: &[i64],
+        intermediates: &[u8],
+        ignored_extra_intermediates: bool,
+        control: char,
+    ) {
+        for action in CSI::parse(params, intermediates, ignored_extra_intermediates, control) {
+            self.perform(Action::CSI(action));
+        }
+    }
+
+    fn esc_dispatch(
+        &mut self,
+        _params: &[i64],
+        intermediates: &[u8],
+        _ignored_extra_intermediates: bool,
+        control: u8,
+    ) {
+        // It doesn't appear to be possible for params.len() > 1 due to the way
+        // that the state machine in vte functions.  As such, it also seems to
+        // be impossible for ignored_extra_intermediates to be true too.
+        self.perform(Action::Esc(Esc::parse(
+            if intermediates.len() == 1 {
+                Some(intermediates[0])
+            } else {
+                None
+            },
+            control,
+        )));
     }
 }

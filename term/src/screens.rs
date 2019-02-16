@@ -60,4 +60,12 @@ impl ScreenOrAlt {
     pub fn is_alt_screen_active(&self) -> bool {
         self.alt_screen_is_active
     }
+
+    pub fn lines_no_ansi(&self) -> Vec<String> {
+        if self.is_alt_screen_active() {
+            self.alt_screen.lines.iter().map(|l| l.clone().as_str()).collect::<Vec<_>>()
+        } else {
+            self.screen.hlines.iter().filter_map(|l| l.to_string_no_ansi()).collect::<Vec<_>>()
+        }
+    }
 }

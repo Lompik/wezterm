@@ -44,6 +44,42 @@ impl LineH {
         }
         false
     }
+
+    pub fn max_char_count(&self) -> usize {
+        self.line.iter().fold(0, |res, line|{
+            res.max(line.x+line.chars.len())
+        })
+    }
+
+    pub fn get_x(&self, x: usize) -> Option<char> {
+        self.line.iter()
+            .filter_map(|lhi|
+                        if x >= lhi.x {
+                            lhi.chars.get(x-lhi.x)
+                        } else {None}
+            )
+            .map(|x| *x)
+            .last()
+    }
+
+    pub fn erase_char(&mut self, x:usize) {
+        for lhi in self.line.iter_mut(){
+            if x >= lhi.x && x-lhi.x < lhi.chars.len() {
+                lhi.chars.remove(x-lhi.x);
+            }
+        }
+
+    }
+
+    pub fn to_string_no_ansi(&self) -> Option<String> {
+        let mcc = self.max_char_count();
+        if mcc == 0 {
+            return None;
+        }
+        Some((0..self.max_char_count())
+            .map(|idx| self.get_x(idx).unwrap_or(' '))
+            .collect::<String>())
+    }
 }
 
 impl LineHisto{
@@ -55,7 +91,65 @@ impl LineHisto{
     }
 }
 
-#[derive(Debug, Clone)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_x_1() {
+        let mut lineh = LineH::default();
+        let test_c = LineHisto{
+            chars: vec!['a', 'b', 'c'],
+            attrs: CellAttributes::default(),
+            x: 0
+        };
+        lineh.push(test_c);
+        assert_eq!(Some('b'), lineh.get_x(1));
+        assert_eq!(3, lineh.max_char_count());
+        assert_eq!(Some("abc".to_string()), lineh.to_string_no_ansi());
+    }
+
+    #[test]
+    fn test_get_x_2() {
+        let mut lineh = LineH::default();
+        let mut tests_c = vec![LineHisto{
+            chars: vec!['a', 'b', 'c'],
+            attrs: CellAttributes::default(),
+            x: 0
+        }, LineHisto{
+            chars: vec!['e', 'f', 'g'],
+            attrs: CellAttributes::default(),
+            x: 1
+        }];
+        lineh.push(tests_c.remove(0));
+        lineh.push(tests_c.remove(0));
+        assert_eq!(Some('e'), lineh.get_x(1));
+        assert_eq!(4, lineh.max_char_count());
+        assert_eq!(Some("aefg".to_string()), lineh.to_string_no_ansi());
+    }
+
+    #[test]
+    fn test_erase() {
+        let mut lineh = LineH::default();
+        let mut tests_c = vec![LineHisto{
+            chars: vec!['a', 'b', 'c'],
+            attrs: CellAttributes::default(),
+            x: 0
+        }, LineHisto{
+            chars: vec!['e', 'f', 'g'],
+            attrs: CellAttributes::default(),
+            x: 1
+        }];
+        lineh.push(tests_c.remove(0));
+        lineh.push(tests_c.remove(0));
+        lineh.erase_char(2);
+        assert_eq!(Some('g'), lineh.get_x(2));
+        assert_eq!(3, lineh.max_char_count());
+        assert_eq!(Some("aeg".to_string()), lineh.to_string_no_ansi());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ScreenType {
     Primary, // with scrollback
     Alternate
@@ -174,9 +268,10 @@ impl Screen {
     /// Sets a line dirty.  The line is relative to the visible origin.
     #[inline]
     pub fn dirty_line(&mut self, idx: VisibleRowIndex) {
-        let line_idx = self.phys_row(idx);
-        if line_idx < self.lines.len() {
-            self.lines[line_idx].set_dirty();
+        //let line_idx = self.phys_row(idx);
+        let idx = idx.abs() as usize;
+        if idx < self.lines.len() {
+            self.lines[idx].set_dirty();
         }
     }
 
@@ -201,20 +296,28 @@ impl Screen {
     }
 
     pub fn insert_cell(&mut self, x: usize, y: VisibleRowIndex) {
+        assert!(self.kind == ScreenType::Alternate); // [TODO]
         let line_idx = self.phys_row(y);
         let line = self.line_mut(line_idx);
         line.insert_cell(x, Cell::default());
     }
 
     pub fn erase_cell(&mut self, x: usize, y: VisibleRowIndex) {
-        let line_idx = self.phys_row(y);
-        let line = self.line_mut(line_idx);
-        line.erase_cell(x);
+        if self.kind == ScreenType::Alternate {
+            let line_idx = self.phys_row(y);
+            let line = self.line_mut(line_idx);
+            line.erase_cell(x);
+        } else {
+            let line_idx = self.phys_row(y);
+            let hline = self.hline_mut(line_idx);
+            hline.erase_char(x);
+        }
     }
 
     /// Set a cell.  the x and y coordinates are relative to the visible screeen
     /// origin.  0,0 is the top left.
     pub fn set_cell(&mut self, x: usize, y: VisibleRowIndex, cell: &Cell) -> &Cell {
+        assert!(self.kind == ScreenType::Alternate); // [TODO]
         let line_idx = self.phys_row(y);
         debug!("set_cell x={} y={} phys={} {:?}", x, y, line_idx, cell);
 
@@ -296,8 +399,14 @@ impl Screen {
     /// the scrollback.
     #[inline]
     pub fn scrollback_or_visible_row(&self, row: ScrollbackOrVisibleRowIndex) -> PhysRowIndex {
-        ((self.lines.len() - self.physical_rows) as ScrollbackOrVisibleRowIndex + row).max(0)
-            as usize
+        match self.kind {
+            ScreenType::Primary => ((self.hlines.len() - self.physical_rows) as ScrollbackOrVisibleRowIndex + row).max(0)
+            as usize,
+            ScreenType::Alternate => {
+                assert!(row < self.physical_rows as i32);
+                row.max(0) as usize
+            }
+        }
     }
 
     #[inline]
@@ -393,6 +502,10 @@ impl Screen {
     /// If the top of the region is the top of the visible display, rather than
     /// removing the lines we let them go into the scrollback.
     pub fn scroll_up(&mut self, scroll_region: &Range<VisibleRowIndex>, num_rows: usize) {
+        if self.kind == ScreenType::Alternate {
+            self.scroll_lines_up(scroll_region, num_rows);
+            return;
+        }
         debug!("scroll_up {:?} {}", scroll_region, num_rows);
         let phys_scroll = self.phys_range(scroll_region);
 
@@ -401,7 +514,6 @@ impl Screen {
         // Invalidate the lines that will move before they move so that
         // the indices of the lines are stable (we may remove lines below)
         for (y, physy) in phys_scroll.clone().enumerate() {
-            //self.line_mut(y).resize_and_clear(width);
             self.hlines[physy].set_dirty();
         }
 
@@ -464,6 +576,77 @@ impl Screen {
         }
     }
 
+    pub fn scroll_lines_up(&mut self, scroll_region: &Range<VisibleRowIndex>, num_rows: usize) {
+        debug!("scroll_up {:?} {}", scroll_region, num_rows);
+        let phys_scroll = self.phys_range(scroll_region);
+
+        debug_assert!(num_rows <= phys_scroll.end - phys_scroll.start);
+
+        // Invalidate the lines that will move before they move so that
+        // the indices of the lines are stable (we may remove lines below)
+        for (y, physy) in phys_scroll.clone().enumerate() {
+            self.lines[physy].set_dirty();
+        }
+
+        // if we're going to remove lines due to lack of scrollback capacity,
+        // remember how many so that we can adjust our insertion point later.
+        let lines_removed = if scroll_region.start > 0 {
+            // No scrollback available for these;
+            // Remove the scrolled lines
+            num_rows
+        } else {
+            let max_allowed = self.physical_rows + self.scrollback_size;
+            if self.hlines.len() + num_rows >= max_allowed {
+                (self.hlines.len() + num_rows) - max_allowed
+            } else {
+                0
+            }
+        };
+
+        let remove_idx = if scroll_region.start == 0 {
+            0
+        } else {
+            phys_scroll.start
+        };
+
+        // To avoid thrashing the heap, prefer to move lines that were
+        // scrolled off the top and re-use them at the bottom.
+        let to_move = lines_removed.min(num_rows);
+        //dbg!(to_move);
+        let (to_remove, to_add) = {
+             for _ in 0..to_move {
+                let mut line = self.lines.remove(remove_idx).unwrap();
+                 // Make the line like a new one of the appropriate width
+                line.resize_and_clear(self.physical_cols);
+                if scroll_region.end as usize == self.physical_rows {
+                    self.lines.push_back(line);
+                } else {
+                    self.lines.insert(phys_scroll.end - 1, line);
+                }
+            }
+            // We may still have some lines to add at the bottom, so
+            // return revised counts for remove/add
+            (lines_removed - to_move, num_rows - to_move)
+        };
+
+        // Perform the removal
+        for _ in 0..to_remove {
+            self.lines.remove(remove_idx);
+        }
+
+        if scroll_region.end as usize == self.physical_rows {
+            // It's cheaper to push() than it is insert() at the end
+            for _ in 0..to_add {
+                self.lines.push_back(Line::with_width(self.physical_cols)); //self.hlines.push_back(Line::with_width(self.physical_cols));
+            }
+        } else {
+            for _ in 0..to_add {
+                self.lines
+                    .insert(phys_scroll.end - 1, Line::with_width(self.physical_cols));
+            }
+        }
+    }
+
     /// ---------
     /// |
     /// |--- top
@@ -479,20 +662,38 @@ impl Screen {
         let phys_scroll = self.phys_range(scroll_region);
         assert!(num_rows <= phys_scroll.end - phys_scroll.start);
 
-        let middle = phys_scroll.end - num_rows;
+        if self.kind == ScreenType::Primary {
+            let middle = phys_scroll.end - num_rows;
 
-        // dirty the rows in the region
-        for y in phys_scroll.start..middle {
-            self.hline_mut(y).set_dirty();
-        }
+            // dirty the rows in the region
+            for y in phys_scroll.start..middle {
+                self.hline_mut(y).set_dirty();
+            }
 
-        for _ in 0..num_rows {
-            self.hlines.remove(middle);
-        }
+            for _ in 0..num_rows {
+                self.hlines.remove(middle);
+            }
 
-        for _ in 0..num_rows {
-            self.hlines
-                .insert(phys_scroll.start, LineH::default());
+            for _ in 0..num_rows {
+                self.hlines
+                    .insert(phys_scroll.start, LineH::default());
+            }
+        } else {
+            let middle = phys_scroll.end - num_rows;
+
+            // dirty the rows in the region
+            for y in phys_scroll.start..middle {
+                self.line_mut(y).set_dirty();
+            }
+
+            for _ in 0..num_rows {
+                self.lines.remove(middle);
+            }
+
+            for _ in 0..num_rows {
+                self.lines
+                    .insert(phys_scroll.start, Line::with_width(self.physical_cols));
+            }
         }
     }
 }

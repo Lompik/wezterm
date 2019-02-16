@@ -945,6 +945,11 @@ impl TerminalState {
         Ok(())
     }
 
+    /// Returns all lines of current screen
+    pub fn lines_no_ansi(&self) -> Vec<String> {
+        self.screen.lines_no_ansi()
+    }
+
     pub fn resize(&mut self, physical_rows: usize, physical_cols: usize) {
         self.screen.resize(physical_rows, physical_cols);
         self.scroll_region = 0..physical_rows as i64;

@@ -62,11 +62,68 @@ impl LineH {
             .last()
     }
 
-    pub fn erase_char(&mut self, x:usize) {
-        for lhi in self.line.iter_mut(){
-            if x >= lhi.x && x-lhi.x < lhi.chars.len() {
-                lhi.chars.remove(x-lhi.x);
+    pub fn get_x_with_attr(&self, x: usize) -> Option<(char, CellAttributes)> {
+        self.line.iter().enumerate()
+            .filter_map(|(i, lhi)|
+                        if x >= lhi.x && lhi.chars.get(x-lhi.x).is_some(){
+                            Some(i)
+                        } else {None}
+            )
+            .last().map(|i| {
+                let lhix = self.line[i].x;
+                (self.line[i].chars[x-lhix], self.line[i].attrs.clone())
+            })
+    }
+
+    pub fn merge(&mut self, width: usize) {
+        if self.line.len() <= width {
+            return;
+        }
+        let mut newlineh = Vec::new();
+        for i in 0..width{
+            match self.get_x_with_attr(i) {
+                Some(xa) => newlineh.push(LineHisto{chars: vec![xa.0], attrs: xa.1, x: i}),
+                _ => {}
             }
+        }
+        if self.max_char_count() > width {
+            for lhi in self.line.iter().skip_while(|lhi| lhi.x + lhi.chars.len() <= width || lhi.chars.is_empty()) {
+                let new = LineHisto {
+                    attrs: lhi.attrs.clone(),
+                    chars: lhi.chars.clone().split_off(width.saturating_sub(lhi.x).min(lhi.chars.len())),
+                    x: lhi.x.max(width)
+                };
+                newlineh.push(new);
+            }
+        }
+        self.line = newlineh;
+    }
+
+    pub fn erase_char(&mut self, x:usize) {
+        let mut found = false;
+        let mut empty = Vec::new();
+        let mut empty_idx = 0usize;
+        self.merge(x+1);
+        //trace!("hline_erase_char {}: {:?}", x, &self.line[..20]);
+        for lhi in self.line.iter_mut(){
+            let lhix = lhi.x;
+            if lhix >= x && found {
+                lhi.x = lhix.saturating_sub(1);
+            }
+            if x >= lhix && x-lhix < lhi.chars.len() {
+                lhi.chars.remove(x-lhix);
+                if lhi.chars.is_empty(){
+                    empty.push(empty_idx);
+                }
+                found = true;
+            }
+            empty_idx += 1;
+        }
+        if found {
+            for idx in empty.iter().rev(){
+                self.line.remove(*idx);
+            }
+            self.set_dirty();
         }
 
     }
@@ -147,6 +204,29 @@ mod tests {
         assert_eq!(3, lineh.max_char_count());
         assert_eq!(Some("aeg".to_string()), lineh.to_string_no_ansi());
     }
+
+
+    #[test]
+    fn test_merge() {
+        let mut lineh = LineH::default();
+        let mut tests_c = vec![LineHisto{
+            chars: vec!['a', 'b', 'c'],
+            attrs: CellAttributes::default(),
+            x: 0
+        }, LineHisto{
+            chars: vec!['e', 'f', 'g'],
+            attrs: CellAttributes::default(),
+            x: 1
+        }];
+        lineh.push(tests_c.remove(0));
+        lineh.push(tests_c.remove(0));
+        lineh.merge(1);
+        eprintln!("{:?}", lineh.line);
+        assert_eq!(Some('f'), lineh.get_x(2));
+        assert_eq!(4, lineh.max_char_count());
+        assert_eq!(Some("aefg".to_string()), lineh.to_string_no_ansi());
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -480,6 +560,7 @@ impl Screen {
             let is_dirty = self.hlines[idx].is_dirty;
             if is_dirty || self.line_at(y).is_dirty(){
                 self.line_at(y).resize_and_clear(width);
+                self.hline_mut(idx).merge(width);
                 for h in self.hline_mut(idx).line.clone().iter() { // [FIXME] clone
                     self.fill_line(&h.chars, &h.attrs, y, h.x);
                 }

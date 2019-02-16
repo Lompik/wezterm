@@ -247,15 +247,16 @@ impl TerminalState {
 
     pub fn get_selection_text(&self) -> String {
         let mut s = String::new();
-
+        let vo = self.viewport_offset;
         if let Some(sel) = self.selection_range.as_ref().map(|r| r.normalize()) {
             let screen = self.screen();
             for y in sel.rows() {
-                let idx = screen.scrollback_or_visible_row(y);
+                let idx = (vo as i32 + y).max(0) as usize; //screen.scrollback_or_visible_row(y);
                 let cols = sel.cols_for_row(y);
                 if !s.is_empty() {
                     s.push('\n');
                 }
+                trace!("get_select_text: {} {} {}", y, screen.scrollback_or_visible_row(y), screen.lines.len());
                 s.push_str(screen.lines[idx].columns_as_str(cols).trim_end());
             }
         }
@@ -266,9 +267,14 @@ impl TerminalState {
     /// Dirty the lines in the current selection range
     fn dirty_selection_lines(&mut self) {
         if let Some(sel) = self.selection_range.as_ref().map(|r| r.normalize()) {
+            let is_alt = self.screen.is_alt_screen_active();
             let screen = self.screen_mut();
             for y in screen.scrollback_or_visible_range(&sel.rows()) {
-                screen.line_mut(y).set_dirty();
+                if  is_alt{
+                    screen.line_mut(y).set_dirty();
+                } else {
+                    screen.hline_mut(y).set_dirty();
+                }
             }
         }
     }
@@ -365,8 +371,8 @@ impl TerminalState {
     /// Called after a mouse move or viewport scroll to recompute the
     /// current highlight
     fn recompute_highlight(&mut self) {
-        let line_idx = self.mouse_position.y as ScrollbackOrVisibleRowIndex
-            - self.viewport_offset as ScrollbackOrVisibleRowIndex;
+        let line_idx = self.mouse_position.y as ScrollbackOrVisibleRowIndex;
+            //- self.viewport_offset as ScrollbackOrVisibleRowIndex;
         let x = self.mouse_position.x;
         self.current_highlight = self.hyperlink_for_cell(x, line_idx);
         self.invalidate_hyperlinks();
@@ -441,7 +447,11 @@ impl TerminalState {
                             let y = event.y as ScrollbackOrVisibleRowIndex
                                 - self.viewport_offset as ScrollbackOrVisibleRowIndex;
                             let idx = self.screen().scrollback_or_visible_row(y);
-                            let line = self.screen().lines[idx].as_str();
+                            let line = if self.screen.is_alt_screen_active(){
+                                self.screen().lines[idx].as_str().to_string()
+                            } else {
+                                self.screen().hlines[idx].to_string_no_ansi().unwrap_or("".to_string())
+                            };
 
                             self.selection_start = None;
                             self.selection_range = None;
@@ -1098,7 +1108,7 @@ impl TerminalState {
                 screen.hline_mut(y).set_dirty();
             }
         }
-        //self.recompute_highlight();
+        self.recompute_highlight();
     }
 
     /// Adjust the scroll position of the viewport by delta.

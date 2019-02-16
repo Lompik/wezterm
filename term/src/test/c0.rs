@@ -16,7 +16,7 @@ fn test_bs() {
 #[test]
 fn test_lf() {
     let mut term = TestTerm::new(3, 10, 0);
-    term.print("hello\n");
+    term.print("hello\n\r");
     term.assert_cursor_pos(0, 1, Some("LF moves to new line"));
 }
 

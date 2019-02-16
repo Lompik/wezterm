@@ -107,7 +107,7 @@ impl LineH {
         //trace!("hline_erase_char {}: {:?}", x, &self.line[..20]);
         for lhi in self.line.iter_mut(){
             let lhix = lhi.x;
-            if lhix >= x && found {
+            if lhix >= x {
                 lhi.x = lhix.saturating_sub(1);
             }
             if x >= lhix && x-lhix < lhi.chars.len() {
@@ -188,21 +188,43 @@ mod tests {
     #[test]
     fn test_erase() {
         let mut lineh = LineH::default();
-        let mut tests_c = vec![LineHisto{
-            chars: vec!['a', 'b', 'c'],
+        let tests_c = vec![LineHisto{
+            chars: vec!['a', 'b', 'c', 'e', 'f', 'g'],
             attrs: CellAttributes::default(),
             x: 0
         }, LineHisto{
-            chars: vec!['e', 'f', 'g'],
+            chars: vec!['h', 'i', 'j'],
             attrs: CellAttributes::default(),
             x: 1
+        }, LineHisto{
+            chars: vec!['k', 'l', 'o'],
+            attrs: CellAttributes::default(),
+            x: 9
         }];
-        lineh.push(tests_c.remove(0));
-        lineh.push(tests_c.remove(0));
+        lineh.push(tests_c[0].clone());
+        lineh.push(tests_c[1].clone());
         lineh.erase_char(2);
-        assert_eq!(Some('g'), lineh.get_x(2));
-        assert_eq!(3, lineh.max_char_count());
-        assert_eq!(Some("aeg".to_string()), lineh.to_string_no_ansi());
+        assert_eq!(Some('j'), lineh.get_x(2));
+        assert_eq!(5, lineh.max_char_count());
+        assert_eq!(Some("ahjfg".to_string()), lineh.to_string_no_ansi());
+
+        lineh.line.clear();
+        lineh.push(tests_c[1].clone());
+        lineh.push(tests_c[0].clone());
+        lineh.erase_char(2);
+        assert_eq!(Some("abefg".to_string()), lineh.to_string_no_ansi());
+        assert_eq!(Some('e'), lineh.get_x(2));
+        assert_eq!(5, lineh.max_char_count());
+
+        lineh.line.clear();
+        lineh.push(tests_c[2].clone());
+        lineh.push(tests_c[0].clone());
+        lineh.push(tests_c[1].clone());
+        lineh.erase_char(2);
+        assert_eq!(Some('l'), lineh.get_x(9));
+        assert_eq!(Some("ahjfg   klo".to_string()), lineh.to_string_no_ansi());
+        assert_eq!(11, lineh.max_char_count());
+
     }
 
 
@@ -553,6 +575,9 @@ impl Screen {
     }
 
     pub fn fill_lines(&mut self, scrollback: ScrollbackOrVisibleRowIndex){
+        if self.kind == ScreenType::Alternate {
+            return;
+        }
         let mut y = 0;
         let width = self.physical_cols;
         let vis = self.hlines.len().saturating_sub  (self.physical_rows + (scrollback.abs() as usize));

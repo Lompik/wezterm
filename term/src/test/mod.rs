@@ -309,9 +309,10 @@ fn print_visible_lines(term: &Terminal) {
 /// same character contents as the expected lines.
 /// The other cell attributes are not compared; this is
 /// a convenience for writing visually understandable tests.
-fn assert_visible_contents(term: &Terminal, expect_lines: &[&str]) {
+fn assert_visible_contents(term: &mut Terminal, expect_lines: &[&str]) {
     print_visible_lines(&term);
-    let screen = term.screen();
+    let screen = term.screen_mut();
+    screen.fill_lines(0);
 
     let expect: Vec<Line> = expect_lines.iter().map(|s| (*s).into()).collect();
 
@@ -334,7 +335,7 @@ fn basic_output() {
     term.cup(1, 1);
     term.print("hello, world!");
     assert_visible_contents(
-        &term,
+        &mut term,
         &[
             "          ",
             " hello, wo",
@@ -346,7 +347,7 @@ fn basic_output() {
 
     term.erase_in_display(EraseInDisplay::EraseToStartOfDisplay);
     assert_visible_contents(
-        &term,
+        &mut term,
         &[
             "          ",
             "          ",
@@ -361,7 +362,7 @@ fn basic_output() {
     term.cup(2, 2);
     term.erase_in_line(EraseInLine::EraseToEndOfLine);
     assert_visible_contents(
-        &term,
+        &mut term,
         &[
             "          ",
             "          ",
@@ -373,7 +374,7 @@ fn basic_output() {
 
     term.erase_in_line(EraseInLine::EraseToStartOfLine);
     assert_visible_contents(
-        &term,
+        &mut term,
         &[
             "          ",
             "          ",
@@ -391,7 +392,7 @@ fn cursor_movement_damage() {
     let mut term = TestTerm::new(2, 3, 0);
 
     term.print("fooo.");
-    assert_visible_contents(&term, &["foo", "o. "]);
+    assert_visible_contents(&mut term, &["foo", "o. "]);
     term.assert_cursor_pos(2, 1, None);
     term.assert_dirty_lines(&[0, 1], None);
 
@@ -415,14 +416,14 @@ fn test_delete_lines() {
     let mut term = TestTerm::new(5, 3, 0);
 
     term.print("111\r\n222\r\n333\r\n444\r\n555");
-    assert_visible_contents(&term, &["111", "222", "333", "444", "555"]);
+    assert_visible_contents(&mut term, &["111", "222", "333", "444", "555"]);
     term.assert_dirty_lines(&[0, 1, 2, 3, 4], None);
     term.cup(0, 1);
     term.clean_dirty_lines();
 
     term.assert_dirty_lines(&[], None);
     term.delete_lines(2);
-    assert_visible_contents(&term, &["111", "444", "555", "   ", "   "]);
+    assert_visible_contents(&mut term, &["111", "444", "555", "   ", "   "]);
     term.assert_dirty_lines(&[1, 2, 3, 4], None);
     term.clean_dirty_lines();
 
@@ -430,22 +431,22 @@ fn test_delete_lines() {
     term.print("aaa\r\nbbb");
     term.cup(0, 1);
     term.clean_dirty_lines();
-    assert_visible_contents(&term, &["111", "444", "555", "aaa", "bbb"]);
+    assert_visible_contents(&mut term, &["111", "444", "555", "aaa", "bbb"]);
 
     // test with a scroll region smaller than the screen
     term.set_scroll_region(1, 3);
-    print_all_lines(&term);
+    print_all_lines(&mut term);
     term.delete_lines(2);
 
-    assert_visible_contents(&term, &["111", "aaa", "   ", "   ", "bbb"]);
-    term.assert_dirty_lines(&[1, 2, 3], None);
+    assert_visible_contents(&mut term, &["111", "aaa", "   ", "   ", "bbb"]);
+    term.assert_dirty_lines(&[1, 2, 3, 4], None);
 
     // expand the scroll region to fill the screen
     term.set_scroll_region(0, 4);
     term.clean_dirty_lines();
     term.delete_lines(1);
 
-    assert_visible_contents(&term, &["111", "   ", "   ", "bbb", "   "]);
+    assert_visible_contents(&mut term, &["111", "   ", "   ", "bbb", "   "]);
     term.assert_dirty_lines(&[1, 2, 3, 4], None);
 }
 
@@ -453,21 +454,21 @@ fn test_delete_lines() {
 fn test_scrollup() {
     let mut term = TestTerm::new(2, 1, 4);
     term.print("1\n");
-    assert_all_contents(&term, &["1", " "]);
+    assert_all_contents(&mut term, &["1", " "]);
     term.print("2\n");
-    assert_all_contents(&term, &["1", "2", " "]);
+    assert_all_contents(&mut term, &["1", "2", " "]);
     term.print("3\n");
-    assert_all_contents(&term, &["1", "2", "3", " "]);
+    assert_all_contents(&mut term, &["1", "2", "3", " "]);
     term.print("4\n");
-    assert_all_contents(&term, &["1", "2", "3", "4", " "]);
+    assert_all_contents(&mut term, &["1", "2", "3", "4", " "]);
     term.print("5\n");
-    assert_all_contents(&term, &["1", "2", "3", "4", "5", " "]);
+    assert_all_contents(&mut term, &["1", "2", "3", "4", "5", " "]);
     term.print("6\n");
-    assert_all_contents(&term, &["2", "3", "4", "5", "6", " "]);
+    assert_all_contents(&mut term, &["2", "3", "4", "5", "6", " "]);
     term.print("7\n");
-    assert_all_contents(&term, &["3", "4", "5", "6", "7", " "]);
+    assert_all_contents(&mut term, &["3", "4", "5", "6", "7", " "]);
     term.print("8\n");
-    assert_all_contents(&term, &["4", "5", "6", "7", "8", " "]);
+    assert_all_contents(&mut term, &["4", "5", "6", "7", "8", " "]);
 }
 
 #[test]
@@ -482,7 +483,7 @@ fn test_hyperlinks() {
     linked.hyperlink = Some(Rc::clone(&link));
 
     assert_lines_equal(
-        &term.screen().visible_lines(),
+        &mut term.screen().visible_lines(),
         &[
             Line::from_text("hello", &linked),
             "     ".into(),
@@ -498,7 +499,7 @@ fn test_hyperlinks() {
     term.print("y!!");
 
     assert_lines_equal(
-        &term.screen().visible_lines(),
+        &mut term.screen().visible_lines(),
         &[
             Line::from_text("hello", &linked),
             Line::from_text("hey!!", &linked),
@@ -537,7 +538,7 @@ fn test_hyperlinks() {
     );
 
     assert_lines_equal(
-        &term.screen().visible_lines(),
+        &mut term.screen().visible_lines(),
         &[
             Line::from_text("hello", &linked),
             Line::from_text("hey!!", &linked),

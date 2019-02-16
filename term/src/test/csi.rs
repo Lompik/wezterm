@@ -4,11 +4,11 @@ use super::*;
 fn test_vpa() {
     let mut term = TestTerm::new(3, 4, 0);
     term.assert_cursor_pos(0, 0, None);
-    term.print("a\nb\nc");
+    term.print("a\n\rb\n\rc");
     term.assert_cursor_pos(1, 2, None);
     term.print("\x1b[d");
     term.assert_cursor_pos(1, 0, None);
-    term.print("\n\n");
+    term.print("\n\r\n\r");
     term.assert_cursor_pos(0, 2, None);
 
     // escapes are 1-based, so check that we're handling that
@@ -25,12 +25,12 @@ fn test_ich() {
     term.print("hey!wat?");
     term.cup(1, 0);
     term.print("\x1b[2@");
-    assert_visible_contents(&term, &["h  ey!", "wat?", "    "]);
+    assert_visible_contents(&mut term, &["h  ey!", "wat?", "    "]);
     // check how we handle overflowing the width
     term.print("\x1b[12@");
-    assert_visible_contents(&term, &["h     ey!", "wat?", "    "]);
+    assert_visible_contents(&mut term, &["h     ey!", "wat?", "    "]);
     term.print("\x1b[-12@");
-    assert_visible_contents(&term, &["h     ey!", "wat?", "    "]);
+    assert_visible_contents(&mut term, &["h     ey!", "wat?", "    "]);
 }
 
 #[test]
@@ -39,12 +39,12 @@ fn test_ech() {
     term.print("hey!wat?");
     term.cup(1, 0);
     term.print("\x1b[2X");
-    assert_visible_contents(&term, &["h  !", "wat?", "    "]);
+    assert_visible_contents(&mut term, &["h  !", "wat?", "    "]);
     // check how we handle overflowing the width
     term.print("\x1b[12X");
-    assert_visible_contents(&term, &["h   ", "wat?", "    "]);
+    assert_visible_contents(&mut term, &["h   ", "wat?", "    "]);
     term.print("\x1b[-12X");
-    assert_visible_contents(&term, &["h   ", "wat?", "    "]);
+    assert_visible_contents(&mut term, &["h   ", "wat?", "    "]);
 }
 
 #[test]
@@ -53,14 +53,14 @@ fn test_dch() {
     term.print("hello world");
     term.cup(1, 0);
     term.print("\x1b[P");
-    assert_visible_contents(&term, &["hllo world  "]);
+    assert_visible_contents(&mut term, &["hllo world  "]);
 
     term.cup(4, 0);
     term.print("\x1b[2P");
-    assert_visible_contents(&term, &["hlloorld    "]);
+    assert_visible_contents(&mut term, &["hlloorld    "]);
 
     term.print("\x1b[-2P");
-    assert_visible_contents(&term, &["hlloorld    "]);
+    assert_visible_contents(&mut term, &["hlloorld    "]);
 }
 
 #[test]
@@ -99,15 +99,15 @@ fn test_dl() {
     term.print("a\nb\nc");
     term.cup(0, 1);
     term.delete_lines(1);
-    assert_visible_contents(&term, &["a", "c", " "]);
+    assert_visible_contents(&mut term, &["a", "c", " "]);
     term.assert_cursor_pos(0, 1, None);
     term.cup(0, 0);
     term.delete_lines(2);
-    assert_visible_contents(&term, &[" ", " ", " "]);
+    assert_visible_contents(&mut term, &[" ", " ", " "]);
     term.print("1\n2\n3");
     term.cup(0, 1);
     term.delete_lines(-2);
-    assert_visible_contents(&term, &["1", "2", "3"]);
+    assert_visible_contents(&mut term, &["1", "2", "3"]);
 }
 
 #[test]
@@ -135,10 +135,10 @@ fn test_cha() {
 #[test]
 fn test_ed() {
     let mut term = TestTerm::new(3, 3, 0);
-    term.print("abc\ndef\nghi");
+    term.print("abc\n\rdef\n\rghi");
     term.cup(1, 2);
     term.print("\x1b[J");
-    assert_visible_contents(&term, &["abc", "def", "g  "]);
+    assert_visible_contents(&mut term, &["abc", "def", "g  "]);
 
     // Set background color to blue
     term.print("\x1b[44m");
@@ -153,7 +153,7 @@ fn test_ed() {
     let mut line: Line = "   ".into();
     line.fill_range(0..=2, &Cell::new(' ', attr.clone()));
     assert_lines_equal(
-        &term.screen().visible_lines(),
+        &mut term.screen().visible_lines(),
         &[line.clone(), line.clone(), line],
         Compare::TEXT | Compare::ATTRS,
     );

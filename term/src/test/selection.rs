@@ -5,7 +5,7 @@ use super::*;
 fn drag_selection() {
     let mut term = TestTerm::new(3, 12, 0);
     term.print("hello world\n");
-    assert_visible_contents(&term, &["hello world ", "            ", "            "]);
+    assert_visible_contents(&mut term, &["hello world ", "            ", "            "]);
 
     term.drag_select(1, 0, 4, 0);
     assert_eq!(term.get_clipboard().unwrap(), "ello");
@@ -14,7 +14,7 @@ fn drag_selection() {
     // here we're dragging from the middle of the skull emoji
     term.print("\u{1F480}skull\n");
     assert_visible_contents(
-        &term,
+        &mut term,
         &["hello world ", "\u{1F480}skull     ", "            "],
     );
     term.drag_select(1, 1, 5, 1);
@@ -57,7 +57,7 @@ fn double_click_selection() {
 fn triple_click_selection() {
     let mut term = TestTerm::new(3, 10, 0);
     term.print("hello world");
-    assert_visible_contents(&term, &["hello worl", "d         ", "          "]);
+    assert_visible_contents(&mut term, &["hello worl", "d         ", "          "]);
     term.click_n(1, 0, MouseButton::Left, 3);
 
     assert_eq!(term.get_clipboard().unwrap(), "hello worl");
@@ -68,7 +68,7 @@ fn triple_click_selection() {
 fn selection_in_scrollback() {
     let mut term = TestTerm::new(2, 1, 4);
     term.print("1234");
-    assert_all_contents(&term, &["1", "2", "3", "4"]);
+    assert_all_contents(&mut term, &["1", "2", "3", "4"]);
 
     // Scroll back one line
     term.scroll_viewport(-1);

@@ -526,23 +526,25 @@ impl Screen {
         self.phys_row(range.start)..self.phys_row(range.end)
     }
 
-    pub fn fill_line(&mut self, p: &[char], pen: &CellAttributes, y: usize, x: usize) -> usize {
+    pub fn fill_line(&mut self, p: &[char], pen: &CellAttributes, y: usize, x: usize) -> (usize, usize) {
         let mut it = p.iter();
         let width = self.physical_cols;
         let mut x = x;
+        let mut yactual = y;
+        let mut nswap = 0;
         while let Some(mut g) = it.next()  //unicode_segmentation::UnicodeSegmentation::graphemes(s.as_str(), true).map(|x| x.chars()).flatten()
         {
 
             let mut print_width =0;
-            {let line = self.line_at(y);
+            let mut has_next = true;
+            {let line = self.line_at(yactual);
              if x == 0 {
                  line.resize_and_clear(width);
              }
 
             // Assign the cell and extract its printable width
 
-             let mut has_next = true;
-            while x+print_width < width && has_next{
+             while x+print_width < width && has_next{
                 x+=print_width;
                 let (_, pw) = line
                     .update_or_set_cell(x, *g, pen.clone());
@@ -567,31 +569,59 @@ impl Screen {
             //     y as ScrollbackOrVisibleRowIndex,
             // );
 
-            if x + print_width < width {
-                x += print_width;
+
+            x += print_width;
+
+            if x >= width && has_next && *g != ' ' {
+                x = 0;
+                if yactual >= nswap+1 {
+                    trace!("fill swapping: {}", yactual);
+                    nswap += 1;
+                    self.line_at(yactual).set_dirty();
+                    let lnew = self.lines.remove(yactual - nswap);
+                    self.lines.insert(yactual, lnew.unwrap());
+                    self.line_at(yactual).resize_and_clear(width);
+                    let (_, pw) = self.line_at(yactual).update_or_set_cell(x, *g, pen.clone());
+                    x+=pw;
+                }
+                else {
+                    return (nswap, nswap);
+                }
             }
         }
-        x
+        (nswap, yactual - y)
     }
 
     pub fn fill_lines(&mut self, scrollback: ScrollbackOrVisibleRowIndex){
         if self.kind == ScreenType::Alternate {
             return;
         }
-        let mut y = 0;
+        let mut y = self.physical_rows-1;
         let width = self.physical_cols;
         let vis = self.hlines.len().saturating_sub  (self.physical_rows + (scrollback.abs() as usize));
-        for idx in vis as usize..vis+self.physical_rows {
+        for idx in (vis as usize..vis+self.physical_rows).rev() {
             let is_dirty = self.hlines[idx].is_dirty;
             if is_dirty || self.line_at(y).is_dirty(){
                 self.line_at(y).resize_and_clear(width);
                 self.hline_mut(idx).merge(width);
+                // if self.hlines[idx].max_char_count() > width {
+                //     trace!("fill_lines: {:?}", self.hlines[idx]);
+                // }
+                let mut nswap = 0;
                 for h in self.hline_mut(idx).line.clone().iter() { // [FIXME] clone
-                    self.fill_line(&h.chars, &h.attrs, y, h.x);
+                    let (nswap1, ydiff) = self.fill_line(&h.chars, &h.attrs, y, h.x.saturating_sub(nswap*width).max(h.x)); // [FIXME] hx<nswap*width with nswap >1
+                    y = y.saturating_sub(nswap1);
+                    nswap=nswap1;
+                    if nswap != 0 && y==0 {
+                        return;
+                    }
                 }
                 self.hlines[idx].is_dirty = false;
             }
-            y += 1;
+            if y == 0 { // [TODO] why ?
+                break;
+            }
+            y = y- 1;
         }
     }
 

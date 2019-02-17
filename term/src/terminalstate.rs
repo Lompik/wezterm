@@ -1861,7 +1861,11 @@ impl<'a> Performer<'a> {
             let x = self.cursor.x;
             let len = p.len();
             self.screen_mut().hline_at(y).push(LineHisto::new(p, pen, x));
-            self.cursor.x = (x + len).min(width);
+            if (x + len) > width && self.cursor.x >= width - 2{
+                self.new_line(true);
+            } else {
+                self.cursor.x = (x + len).min(width);
+            }
         }
 
 

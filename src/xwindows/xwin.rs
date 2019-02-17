@@ -503,7 +503,7 @@ impl X11TerminalWindow {
         let mut cmd = Command::new(cmd);
         let lines = {
             let cur_tab = self.tabs.get_active();
-            let lines = cur_tab.terminal.borrow().screen().lines.iter().map(|l| l.clone().as_str()).collect::<Vec<_>>();
+            let lines = cur_tab.terminal.borrow().lines_no_ansi();
             lines.join("\n")
         };
         cmd.args(args);

@@ -693,6 +693,10 @@ impl TerminalState {
             host.new_tab();
             return Ok(());
         }
+        if mods == (KeyModifiers::CTRL | KeyModifiers::SHIFT)  && key == KeyCode::Char('H'){
+            host.new_tab_with_cmd("less", &["-iMSx4", "-FXR", "+G", "--", "-"], true);
+            return Ok(());
+        }
         if mods == (KeyModifiers::SUPER | KeyModifiers::SHIFT)
             && (key == KeyCode::Char('[') || key == KeyCode::Char('{'))
         {
@@ -748,10 +752,12 @@ impl TerminalState {
         }
 
         let to_send = match (key, ctrl, alt, shift, self.application_cursor_keys) {
+            (Char('v'), _, ALT, _, _) => paste!(),
             (Enter, _, ALT, ..) | (Char('\r'), _, ALT, ..) | (Char('\n'), _, ALT, ..) => {
                 host.toggle_full_screen();
                 return Ok(());
             }
+            (LeftTab, _,_,_,..) => "\x1b[Z",
             (Tab, ..) => "\t",
             (Enter, ..) => "\r",
             (Backspace, ..) => "\x08",
@@ -759,9 +765,14 @@ impl TerminalState {
             // Delete
             (Char('\x7f'), _, _, _, false) | (Delete, _, _, _, false) => "\x7f",
             (Char('\x7f'), ..) | (Delete, ..) => "\x1b[3~",
+
             (Insert, _, _, SHIFT, _) => paste!(),
             (Char('v'), ..) if mods == KeyModifiers::SUPER => paste!(),
-
+            (Char('/'), CTRL, _, _, _) => {
+                buf.push(('_' as u8 - 0x40) as char);
+                buf.as_str()
+            },
+            (Char(' '), CTRL, _, _, _) | (Char('~'), CTRL, _, _, _) | (Char('@'), CTRL, _, _, _)=> "\0",
             (Char(c), CTRL, _, SHIFT, _) if c <= 0xff as char && c > 0x40 as char => {
                 // If shift is held we have C == 0x43 and want to translate
                 // that into 0x03
@@ -791,10 +802,28 @@ impl TerminalState {
             (Home, _, _, _, APPCURSOR) => "\x1bOH",
             (End, _, _, _, APPCURSOR) => "\x1bOF",
 
+            (UpArrow, _, ALT, _, _) => "\x1b[1;3A",
+            (DownArrow, _, ALT, _, _) => "\x1b[1;3B",
+            (RightArrow, _, ALT, _, _) => "\x1b[1;3C",
+            (LeftArrow, _, ALT, _, _) => "\x1b[1;3D",
+            (Home, _, ALT, _, _) => "\x1b[1;3H",
+            (End, _, ALT, _, _) => "\x1b[1;3F",
+
+            (UpArrow, _, _, SHIFT, _) | (MoveLineUp, _, _, _, _) => {
+                let rows = 1;
+                self.scroll_viewport(-rows);
+                ""
+            }
+            (DownArrow, _, _, SHIFT, _) | (MoveLineDown, _, _, _, _) => {
+                let rows = 1;
+                self.scroll_viewport(rows);
+                ""
+            }
             (UpArrow, ..) => "\x1b[A",
             (DownArrow, ..) => "\x1b[B",
             (RightArrow, ..) => "\x1b[C",
             (LeftArrow, ..) => "\x1b[D",
+
             (PageUp, _, _, SHIFT, _) => {
                 let rows = self.screen().physical_rows as i64;
                 self.scroll_viewport(-rows);

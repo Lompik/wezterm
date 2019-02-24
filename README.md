@@ -136,12 +136,21 @@ brights = ["grey", "red", "lime", "yellow", "blue", "fuchsia", "aqua", "white"]
 
 ## Performance
 
-While ultimate speed is not the main goal, performance is important!
-Using the GPU to render the terminal contents helps keep CPU usage down
-and the output feeling snappy.
+Here's a very basic benchmark:
 
-If you want the absolute fastest terminal emulator, [alacritty](https://github.com/jwilm/alacritty)
-is currently king of the crop.
+```
+$ find /usr > /tmp/usr-files.txt
+$ time cat /tmp/usr-files.txt
+```
+
+It's possible to achieve lighting speed while being at the edge of breaking terminal emulation. Without unicode grapheme segmentation & with some sketchy intermediate line buffering, here's some numbers:
+
+| Terminal         | Time (seconds) |
+|------------------|-------|
+| kitty 0.13.3     | 2.6  |
+| urxvt            | 1.5  |
+| alacritty 0.2.9  | 1.0  |
+| wezterm c770eaf  | 0.8  |
 
 ## Getting help
 
@@ -151,5 +160,3 @@ This is a spare time project, so please bear with me.  There are two channels fo
 * There is a gitter room for (potentially!) real time discussions: https://gitter.im/wezterm/Lobby
 
 The gitter room is probably better suited to questions than it is to bug reports, but don't be afraid to use whichever you are most comfortable using and we'll work it out.
-
-

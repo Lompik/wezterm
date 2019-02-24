@@ -229,6 +229,86 @@ impl SlavePty {
 
         Ok(child)
     }
+
+    pub fn spawn_command_with_stdin(self, mut cmd: Command, text: &str) -> Result<Child, Error> {
+
+        let mut stdin_pipe: [libc::c_int; 2] = [0, 0];
+        let res = unsafe{
+            libc::pipe(stdin_pipe.as_mut_ptr())
+        };
+        if res != 0 {
+            eprintln!("error setting pipe");
+        }
+        eprintln!("{:?}", stdin_pipe);
+
+        let txt: String = text.into();
+        std::thread::spawn(move|| {
+            use std::io::Write;
+            let mut cw = unsafe {
+                std::fs::File::from_raw_fd(stdin_pipe[1])
+            }; // close when out of scope
+            //use std::io::BufWriter;
+            cw.write_all(txt.as_bytes()).expect("Failed to write to child pipe");
+            eprintln!("stding wirtten");
+        });
+
+        //use std::process::Stdio::FromRawFd;
+        cmd.stdin(self.as_stdio()?)
+            .stdout(self.as_stdio()?)
+            .stderr(self.as_stdio()?)
+            .before_exec(move || {
+                // Clean up a few things before we exec the program
+
+                unsafe {
+                    // Clear out any potentially problematic signal
+                    // dispositions that we might have inherited
+                    eprintln!("pty:{}", "setting signals");
+                    for signo in &[
+                        libc::SIGCHLD,
+                        libc::SIGHUP,
+                        libc::SIGINT,
+                        libc::SIGQUIT,
+                        libc::SIGTERM,
+                        libc::SIGALRM,
+                    ] {
+                        libc::signal(*signo, libc::SIG_DFL);
+                    }
+
+                    // Establish ourselves as a session leader.
+                    if libc::setsid() == -1 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    eprintln!("pty:{}", "stsid done");
+                    // Set the pty as the controlling terminal.
+                    // Failure to do this means that delivery of
+                    // SIGWINCH won't happen when we resize the
+                    // terminal, among other undesirable effects.
+                    if libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    eprintln!("pty: befoire exec");
+
+                    libc::dup2(stdin_pipe[0], 0);
+                    libc::close(stdin_pipe[0]);
+                    libc::close(stdin_pipe[1]);
+
+                    Ok(())
+                }
+            });
+
+        let mut child = cmd.spawn()?;
+        eprintln!("pty:spawned !");
+        // Ensure that we close out the slave fds that Child retains;
+        // they are not what we need (we need the master side to reference
+        // them) and won't work in the usual way anyway.
+        // In practice these are None, but it seems best to be move them
+        // out in case the behavior of Command changes in the future.
+        child.stdin.take();
+        child.stdout.take();
+        child.stderr.take();
+
+        Ok(child)
+    }
 }
 
 impl MasterPty {

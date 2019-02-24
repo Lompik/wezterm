@@ -269,6 +269,31 @@ impl GuiEventLoop {
         self.add_window(window)
     }
 
+    pub fn spawn_tab_with_cmd<T: AsRef<std::ffi::OsStr>>(&self, window_id: WindowId, cmd: &str, args: &[T], stdin: bool) -> Result<(), Error> {
+        let mut windows = self.windows.borrow_mut();
+
+        let fd = {
+            let mut window = windows.by_id.get_mut(&window_id).ok_or_else(|| {
+                format_err!("no window_id {:?} in the windows_by_id map", window_id)
+            })?;
+
+            window.spawn_tab_with_cmd(cmd, args, stdin)?
+        };
+
+        eprintln!("spawned new tab with fd = {}", fd);
+
+        let entry = Rc::new(TabEntry { fd, window_id });
+        windows.by_fd.insert(fd, Rc::clone(&entry));
+        self.poll.register(
+            &*entry,
+            Token(fd as usize),
+            Ready::readable(),
+            PollOpt::edge(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn add_window(&self, window: X11TerminalWindow) -> Result<(), Error> {
         let window_id = window.window_id();
 

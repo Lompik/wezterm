@@ -4,8 +4,17 @@ extern crate failure;
 extern crate failure_derive;
 #[macro_use]
 extern crate serde_derive;
+
+extern crate term;
+extern crate termwiz;
+extern crate toml;
+extern crate unicode_width;
 #[macro_use]
-pub mod log;
+extern crate log;
+extern crate env_logger;
+#[macro_use]
+pub mod logging;
+
 use failure::Error;
 use std::ffi::OsString;
 use structopt::StructOpt;
@@ -117,6 +126,7 @@ fn main() -> Result<(), Error> {
         None
     };
 
+
     let gui_system = opts.gui_system.unwrap_or(config.gui_system);
     let gui = gui_system.new()?;
 
@@ -153,7 +163,7 @@ fn spawn_window_impl(
     )?;
 
     let child = slave.spawn_command(cmd)?;
-    eprintln!("spawned: {:?}", child);
+    trace!("spawned: {:?}", child);
 
     let terminal = term::Terminal::new(
         initial_rows as usize,

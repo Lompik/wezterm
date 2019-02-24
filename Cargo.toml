@@ -27,6 +27,8 @@ open = "1.2"
 structopt = "0.2"
 foreign-types = "0.3"
 winit = "0.18"
+log = "0.4.0"
+env_logger = "0.6.0"
 
 [target.'cfg(unix)'.dependencies]
 harfbuzz-sys = "~0.3"

@@ -11,6 +11,7 @@ image = "~0.19"
 ordered-float = "~0.5"
 unicode-segmentation = "~1.2"
 unicode-width = "~0.1"
+log = "0.4.0"
 
 [dependencies.termwiz]
 path = "../termwiz"

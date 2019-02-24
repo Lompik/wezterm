@@ -153,8 +153,9 @@ impl Sprite {
             0
         } else {
             // Width of the first cell
-            let cell_0 =
-                width.min((slice.cell_width as i32).saturating_sub(slice.left_offset)) as u32;
+            //eprintln!("slice: {:?}" ,slice);
+            let cell_0 =width.min((slice.cell_width as i32).saturating_sub(slice.left_offset)) as u32;
+                //width.min((((1+slice.cell_idx) * slice.cell_width) as i32).saturating_sub(slice.left_offset)) as u32;
 
             if slice.cell_idx == slice.num_cells - 1 {
                 // Width of all the other cells
@@ -182,6 +183,7 @@ impl Sprite {
             width.min((slice.cell_width as i32).saturating_sub(slice.left_offset)) as u32
         } else if slice.cell_idx == slice.num_cells - 1 {
             width as u32 - self.left_pix(slice)
+            //if width as u32 >= self.left_pix(slice) {width as u32 - self.left_pix(slice)} else {0}
         } else {
             // somewhere in the middle of the sequence, the width is
             // simply the cell_width

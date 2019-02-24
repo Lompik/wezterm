@@ -267,7 +267,7 @@ uniform sampler2D underline_tex;
 uniform bool bg_and_line_layer;
 
 float multiply_one(float src, float dst, float inv_dst_alpha, float inv_src_alpha) {
-    return (src * dst) + (src * (inv_dst_alpha)) + (dst * (inv_src_alpha));
+    return (src * ((1.0 - inv_src_alpha))) + (dst * (inv_src_alpha)); //+ (src * (inv_dst_alpha)) ;
 }
 
 // Alpha-regulated multiply to colorize the glyph bitmap.
@@ -277,11 +277,12 @@ vec4 multiply(vec4 src, vec4 dst) {
     float inv_src_alpha = 1.0 - src.a;
     float inv_dst_alpha = 1.0 - dst.a;
 
+    float a = max(0.0, min(1.0,dst.a));
     return vec4(
-        multiply_one(src.r, dst.r, inv_dst_alpha, inv_src_alpha) / dst.a,
-        multiply_one(src.g, dst.g, inv_dst_alpha, inv_src_alpha) / dst.a,
-        multiply_one(src.b, dst.b, inv_dst_alpha, inv_src_alpha) / dst.a,
-        dst.a);
+        max(0.0, min(multiply_one(src.r, dst.r, inv_dst_alpha, inv_src_alpha) , 1.0)),
+        max(0.0, min(multiply_one(src.g, dst.g, inv_dst_alpha, inv_src_alpha) , 1.0)),
+        max(0.0, min(multiply_one(src.b, dst.b, inv_dst_alpha, inv_src_alpha) , 1.0)),
+        a*1.35);
 }
 
 void main() {
@@ -609,13 +610,16 @@ impl Renderer {
             (has_color, glyph, metrics.cell_width, metrics.cell_height)
         };
 
-        let scale = if (info.x_advance / f64::from(info.num_cells)).floor() > cell_width {
-            f64::from(info.num_cells) * (cell_width / info.x_advance)
-        } else if glyph.height as f64 > cell_height {
-            cell_height / glyph.height as f64
+        let effective_height = cell_height;
+
+        let scale = if (effective_height - (glyph.height as f64)) < -0.99 {
+            effective_height / glyph.height as f64
         } else {
             1.0f64
         };
+
+        //let scale = 1.0f64;
+
         #[cfg_attr(feature = "cargo-clippy", allow(float_cmp))]
         let (x_offset, y_offset) = if scale != 1.0 {
             (info.x_offset * scale, info.y_offset * scale)
@@ -648,6 +652,9 @@ impl Renderer {
             let bearing_x = (f64::from(glyph.bearing_x) * scale) as isize;
             let bearing_y = (f64::from(glyph.bearing_y) * scale) as isize;
 
+            if glyph.width > 40 || scale < 1.0 {
+                eprintln!("cw/(gw)/(xof)/bx: {} ({}, {}) ({}, {}) {}", cell_width, glyph.height, glyph.width, x_offset, y_offset, bearing_x);
+            }
             CachedGlyph {
                 texture: Some(tex),
                 has_color,
@@ -721,6 +728,7 @@ impl Renderer {
                 indices.push(idx + 3);
             }
         }
+        eprintln!("vertex buffer {}x{} needs {}", num_cols, num_rows, verts.len() * std::mem::size_of_val(&verts[0]));
 
         Ok((
             VertexBuffer::dynamic(facade, &verts)?,
@@ -904,7 +912,6 @@ impl Renderer {
                                 scale: glyph.scale,
                                 left_offset: left as i32,
                             };
-
                             // How much of the width of this glyph we can use here
                             let slice_width = texture.slice_width(&slice);
 
@@ -1007,6 +1014,7 @@ impl Renderer {
     ) -> (RgbaTuple, RgbaTuple) {
         let selected = term::in_range(cell_idx, selection);
         let is_cursor = line_idx as i64 == cursor.y && cursor.x == cell_idx;
+        //trace!("compute_cell_ggf_bg: {}, {} @ {:?}  isc:{}", line_idx, cell_idx, (cursor.x, cursor.y), is_cursor);
 
         let (fg_color, bg_color) = match (selected, is_cursor) {
             // Normally, render the cell as configured
@@ -1034,6 +1042,7 @@ impl Renderer {
         let background_color = self
             .palette
             .resolve_bg(&term::color::ColorAttribute::Default);
+        //eprintln!("{:?}", background_color);
         let (r, g, b, a) = background_color.to_tuple_rgba();
         target.clear_color(r, g, b, a);
 
@@ -1048,6 +1057,7 @@ impl Renderer {
 
         let tex = self.atlas.borrow().texture();
 
+        //eprintln!("Draw: {:?}", std::time::Instant::now());
         // Pass 1: Draw backgrounds, strikethrough and underline
         target.draw(
             &*self.glyph_vertex_buffer.borrow(),
@@ -1061,6 +1071,7 @@ impl Renderer {
             },
             &glium::DrawParameters {
                 blend: glium::Blend::alpha_blending(),
+                //color_mask: (true, false, true, true),
                 ..Default::default()
             },
         )?;
@@ -1077,6 +1088,7 @@ impl Renderer {
             },
             &glium::DrawParameters {
                 blend: glium::Blend::alpha_blending(),
+                //color_mask: (true, false, true, false),
                 ..Default::default()
             },
         )?;

@@ -56,8 +56,9 @@ servo-fontconfig = "~0.4"
 egli = "~0.4"
 x11 = {version ="~2.18", features = ["xlib_xcb"]}
 
-[dependencies.glium]
-version = "~0.23"
+[target.'cfg(any(target_os = "android", all(unix, not(target_os = "macos"))))'.dependencies.glium]
+path="./glium"
+version = "*"
 default-features = false
 features = ["glutin"]
 

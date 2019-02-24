@@ -341,7 +341,7 @@ impl TerminfoRenderer {
                         let num_spaces = size.ws_col as usize * size.ws_row as usize;
                         let mut buf = Vec::with_capacity(num_spaces);
                         buf.resize(num_spaces, b' ');
-                        out.write(buf.as_slice())?;
+                        out.write_all(buf.as_slice())?;
                     }
                 }
                 Change::ClearToEndOfLine(color) => {

@@ -202,7 +202,7 @@ impl Surface {
             for x in 0..image.width {
                 self.lines[self.ypos + y].set_cell(
                     self.xpos + x,
-                    Cell::new(
+                    &Cell::new(
                         ' ',
                         self.attributes
                             .clone()
@@ -311,7 +311,7 @@ impl Surface {
             // the model, which seems like a lossy design choice.
             let width = cell.width().max(1);
 
-            self.lines[self.ypos].set_cell(self.xpos, cell);
+            self.lines[self.ypos].set_cell(self.xpos, &cell);
 
             // Increment the position now; we'll defer processing
             // wrapping until the next printed character, otherwise

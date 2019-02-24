@@ -181,34 +181,235 @@ impl CellAttributes {
     }
 }
 
+const BLANKATTRS: CellAttributes = CellAttributes {
+    attributes: 0,
+    /// The foreground color
+    foreground: ColorAttribute::Default,
+    /// The background color
+    background: ColorAttribute::Default,
+    /// The hyperlink content, if any
+    hyperlink: None,
+    /// The image data, if any
+    image: None,
+};
+
 /// Models the contents of a cell on the terminal display
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Cell {
-    text: SmallVec<[u8; 4]>,
+pub struct CellDataAll {
+    pub text: SmallVec<[u8; 4]>,
     attrs: CellAttributes,
 }
 
-impl Default for Cell {
-    fn default() -> Self {
-        Cell::new(' ', CellAttributes::default())
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum CellData {
+    Unicode(SmallVec<[u8; 4]>),
+    Ascii(char),
+}
+
+
+const MAX_ONE_B: u32   =     0x80;
+const MAX_TWO_B: u32   =    0x800;
+const MAX_THREE_B: u32 = 0x10000;
+
+impl CellData {
+    fn new(text: char) -> CellData {
+        let text_u32 = text as u32;
+        let len = if text_u32 < MAX_ONE_B {
+            let c = if text_u32 < 0x20 {
+                0x20
+            } else {
+                text_u32 as u8
+            };
+            return  CellData::Ascii(text);
+        } else if  text_u32 < MAX_TWO_B {
+            2
+        } else if text_u32 < MAX_THREE_B {
+            3
+        } else {4};
+
+        let mut buf: [u8; 4] = [0; 4];
+        //storage.resize(len, 0);
+        text.encode_utf8(&mut buf);
+        let storage = SmallVec::from_buf_and_len(buf, len);
+
+        CellData::Unicode(storage)
     }
 }
+
+pub struct Cell2 {
+    // pub text: SmallVec<[u8; 4]>,
+    attrs: CellAttributes,
+    cd: SmallVec<[u8; 4]>
+}
+
+/// Models the contents of a cell on the terminal display
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Cell {
+    // pub text: SmallVec<[u8; 4]>,
+    attrs: CellAttributes,
+    cd: SmallVec<[u8; 4]>
+}
+
+//pub const CELL_BLANK: Cell = Cell{cd: Smassmallvec![0x20u8], attrs: BLANKATTRS};
+
+impl Default for Cell {
+    fn default() -> Self {
+        //CELL_BLANK  //Cell::new(' ', CellAttributes::default())
+        let storage: SmallVec<[u8; 4]>=smallvec![0x20u8];
+        Cell{
+            attrs: BLANKATTRS,
+            cd:(storage)
+        }
+    }
+}
+
+     //m0\n128|"\x%02d" // "%c"\n
+const ASCII_TABLE: [&'static str; 128] = [
+    "\x00", // " "
+"\x01", // ""
+"\x02", // ""
+"\x03", // ""
+"\x04", // ""
+"\x05", // ""
+"\x06", // ""
+"\x07", // ""
+"\x08", // ""
+"\x09", // "	"
+"\x0a", // ""
+"\x0b", // ""
+"\x0c", // ""
+"\x0d", // "ecM"
+"\x0e", // ""
+"\x0f", // ""
+"\x10", // ""
+"\x11", // ""
+"\x12", // ""
+"\x13", // ""
+"\x14", // ""
+"\x15", // ""
+"\x16", // ""
+"\x17", // ""
+"\x18", // ""
+"\x19", // ""
+"\x1a", // ""
+"\x1b", // ""
+"\x1c", // ""
+"\x1d", // ""
+"\x1e", // ""
+"\x1f", // ""
+"\x20", // " "
+"\x21", // "!"
+"\x22", // """
+"\x23", // "#"
+"\x24", // "$"
+"\x25", // "%"
+"\x26", // "&"
+"\x27", // "'"
+"\x28", // "("
+"\x29", // ")"
+"\x2a", // "*"
+"\x2b", // "+"
+"\x2c", // ","
+"\x2d", // "-"
+"\x2e", // "."
+"\x2f", // "/"
+"\x30", // "0"
+"\x31", // "1"
+"\x32", // "2"
+"\x33", // "3"
+"\x34", // "4"
+"\x35", // "5"
+"\x36", // "6"
+"\x37", // "7"
+"\x38", // "8"
+"\x39", // "9"
+"\x3a", // ":"
+"\x3b", // ";"
+"\x3c", // "<"
+"\x3d", // "="
+"\x3e", // ">"
+"\x3f", // "?"
+"\x40", // "@"
+"\x41", // "A"
+"\x42", // "B"
+"\x43", // "C"
+"\x44", // "D"
+"\x45", // "E"
+"\x46", // "F"
+"\x47", // "G"
+"\x48", // "H"
+"\x49", // "I"
+"\x4a", // "J"
+"\x4b", // "K"
+"\x4c", // "L"
+"\x4d", // "M"
+"\x4e", // "N"
+"\x4f", // "O"
+"\x50", // "P"
+"\x51", // "Q"
+"\x52", // "R"
+"\x53", // "S"
+"\x54", // "T"
+"\x55", // "U"
+"\x56", // "V"
+"\x57", // "W"
+"\x58", // "X"
+"\x59", // "Y"
+"\x5a", // "Z"
+"\x5b", // "["
+"\x5c", // "\"
+"\x5d", // "]"
+"\x5e", // "^"
+"\x5f", // "_"
+"\x60", // "`"
+"\x61", // "a"
+"\x62", // "b"
+"\x63", // "c"
+"\x64", // "d"
+"\x65", // "e"
+"\x66", // "f"
+"\x67", // "g"
+"\x68", // "h"
+"\x69", // "i"
+"\x6a", // "j"
+"\x6b", // "k"
+"\x6c", // "l"
+"\x6d", // "m"
+"\x6e", // "n"
+"\x6f", // "o"
+"\x70", // "p"
+"\x71", // "q"
+"\x72", // "r"
+"\x73", // "s"
+"\x74", // "t"
+"\x75", // "u"
+"\x76", // "v"
+"\x77", // "w"
+"\x78", // "x"
+"\x79", // "y"
+"\x7a", // "z"
+"\x7b", // "{"
+"\x7c", // "|"
+"\x7d", // "}"
+"\x7e", // "~"
+"\x7f", // ""
+];
 
 impl Cell {
     /// De-fang the input character such that it has no special meaning
     /// to a terminal.  All control and movement characters are rewritten
     /// as a space.
-    fn nerf_control_char(text: &mut SmallVec<[u8; 4]>) {
+    pub fn nerf_control_char(text: &mut SmallVec<[u8; 8]>) {
         if text.len() == 0 {
             text.push(b' ');
             return;
         }
 
-        if text.as_slice() == &[b'\r', b'\n'] {
-            text.remove(1);
-            text[0] = b' ';
-            return;
-        }
+        // if text.as_slice() == &[b'\r', b'\n'] {
+        //     text.remove(1);
+        //     text[0] = b' ';
+        //     return;
+        // }
 
         if text.len() != 1 {
             return;
@@ -219,21 +420,63 @@ impl Cell {
         }
     }
 
+    pub fn blank(&mut self){
+        self.cd = smallvec![0x20u8];
+        self.attrs = CellAttributes::default();
+    }
+
+    pub fn is_blank(&self) -> bool {
+        match &self.cd[0] {
+            0x20 => true,
+            _ => false
+        }
+    }
+
+    pub fn blank_with_attrs(&mut self, attrs: CellAttributes){
+        self.cd = smallvec![0x20u8];
+        self.attrs = attrs;
+    }
+
+    pub fn set(&mut self, cell: &Cell){
+        self.cd = cell.cd.clone();
+        self.attrs = cell.attrs.clone();
+    }
+
+    #[inline]
+    pub fn update(&mut self, text: char, attrs: CellAttributes){
+        self.attrs = attrs;
+        if (text as u32) < MAX_ONE_B && self.cd[0]  & (MAX_ONE_B as u8) == 0 {
+            self.cd[0] = text as u8;
+            return
+        }
+        self.cd.clear();
+        let mut b = [0;4];
+        text.encode_utf8(&mut b);
+        self.cd.insert_from_slice(0, &b[..text.len_utf8()]);
+        return;
+
+        //self.cd = CellData::new(text);
+    }
+
+    pub fn append(&mut self, text: char) {
+        let len = text.len_utf8();
+        let mut b = [0; 4];
+        text.encode_utf8(&mut b);
+        self.cd.extend_from_slice(&b[..len]);
+    }
+
     /// Create a new cell holding the specified character and with the
     /// specified cell attributes.
     /// All control and movement characters are rewritten as a space.
     pub fn new(text: char, attrs: CellAttributes) -> Self {
-        let len = text.len_utf8();
-        let mut storage = SmallVec::with_capacity(len);
-        unsafe {
-            storage.set_len(len);
-        }
-        text.encode_utf8(&mut storage);
-        Self::nerf_control_char(&mut storage);
 
+        let mut storage = SmallVec::default();
+        storage.resize(text.len_utf8(), 0);
+
+        text.encode_utf8(&mut storage);
         Self {
-            text: storage,
-            attrs,
+            cd: storage,
+            attrs
         }
     }
 
@@ -245,12 +488,18 @@ impl Cell {
     /// be passed but it should not be used to hold strings other than
     /// graphemes.
     pub fn new_grapheme(text: &str, attrs: CellAttributes) -> Self {
-        let mut storage = SmallVec::from_slice(text.as_bytes());
-        Self::nerf_control_char(&mut storage);
+        let bytes = text.as_bytes();
+        // let text = match text {
+        //     "" => return Cell{attrs, cd: CellData::Ascii(' ')},
+        //     "\n" | "\r\n" | "\r" => return Cell{attrs, cd: CellData::Ascii(' ')},
+        //     c if c.len()==1 && bytes[0] < 0x20 => return Cell{attrs, cd: CellData::Ascii(' ')},
+        //     c if c.len()==1 && bytes[0] < 0x1F  => return Cell{attrs, cd: CellData::Ascii(bytes[0] as char)},
+        //     _ => text
+        // };
+        let mut storage = SmallVec::from_slice(bytes);
+        //cargo nerf_cc!(&mut storage);
 
-        Self {
-            text: storage,
-            attrs,
+        Self {attrs,  cd: (storage)
         }
     }
 
@@ -258,12 +507,20 @@ impl Cell {
     pub fn str(&self) -> &str {
         // unsafety: this is safe because the constructor guarantees
         // that the storage is valid utf8
-        unsafe { std::str::from_utf8_unchecked(&self.text) }
+        unsafe { std::str::from_utf8_unchecked(&self.cd) }
+        // match &self.cd {
+        //     CellData::Unicode(a) => unsafe { std::str::from_utf8_unchecked(&a) },
+        //     CellData::Ascii(a) => ASCII_TABLE.get(*a as usize).expect("Character unknown")
+        // }
     }
 
     /// Returns the number of cells visually occupied by this grapheme
     pub fn width(&self) -> usize {
-        UnicodeWidthStr::width(self.str())
+        UnicodeWidthStr::width(unsafe { std::str::from_utf8_unchecked(&self.cd) })
+        // match &self.cd {
+        //     CellData::Unicode(a) => UnicodeWidthStr::width(unsafe { std::str::from_utf8_unchecked(&a) }),
+        //     CellData::Ascii(_) => 1
+        // }
     }
 
     /// Returns the attributes of the cell
@@ -271,6 +528,8 @@ impl Cell {
         &self.attrs
     }
 }
+
+
 
 /// Models a change in the attributes of a cell in a stream of changes.
 /// Each variant specifies one of the possible attributes; the corresponding

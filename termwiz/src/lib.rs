@@ -49,8 +49,8 @@ extern crate termios;
 extern crate winapi;
 #[macro_use]
 extern crate serde_derive;
-extern crate num;
-extern crate vte;
+pub extern crate num;
+pub extern crate vte;
 #[macro_use]
 extern crate num_derive;
 #[macro_use]
@@ -63,6 +63,7 @@ extern crate image as image_crate;
 extern crate memmem;
 extern crate ordered_float;
 extern crate regex;
+#[macro_use]
 extern crate smallvec;
 extern crate unicode_segmentation;
 extern crate unicode_width;

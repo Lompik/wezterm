@@ -702,7 +702,7 @@ impl TerminalState {
             return Ok(());
         }
         if mods == (KeyModifiers::CTRL | KeyModifiers::SHIFT)  && key == KeyCode::Char('H'){
-            host.new_tab_with_cmd("less", &["-iMSx4", "-FXR", "+G", "--", "-"], true);
+            host.new_tab_with_cmd("less", &["-iMSx4", "-XR", "+G", "--", "-"], true);
             return Ok(());
         }
         if mods == (KeyModifiers::SUPER | KeyModifiers::SHIFT)

@@ -134,6 +134,23 @@ impl<'a> term::TerminalHost for TabHost<'a> {
             }));
     }
 
+    fn new_tab_with_cmd(&mut self, cmd: &str, args: &[&str], stdin: bool) {
+        let events = Rc::clone(&self.host.event_loop);
+        let window_id = self.host.window.window.window_id;
+
+        let args:Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
+        let cmd = cmd.to_owned();
+        self.host
+            .event_loop
+            .core
+            .spawn(futures::future::poll_fn(move || {
+                events
+                    .spawn_tab_with_cmd(window_id, &cmd, &args, stdin)
+                    .map(futures::Async::Ready)
+                    .map_err(|_| ())
+            }));
+    }
+
     fn activate_tab(&mut self, tab: usize) {
         self.with_window(move |win| win.activate_tab(tab))
     }

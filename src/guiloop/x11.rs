@@ -287,13 +287,13 @@ impl GuiEventLoop {
             (tab_id, fd)
         };
 
-        trace!("spawned new tab with fd = {}", fd);
+        trace!("spawned new tab with id: {}  fd = {}", tab_id, fd);
 
         let entry = Rc::new(TabEntry { tab_id, fd, window_id});
         windows.tab_by_id.insert(tab_id, Rc::clone(&entry));
         self.poll.register(
             &*entry,
-            Token(fd as usize),
+            Token(tab_id as usize),
             Ready::readable(),
             PollOpt::edge(),
         )?;

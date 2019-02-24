@@ -109,6 +109,7 @@ struct Opt {
 }
 
 fn main() -> Result<(), Error> {
+    logging::init();
     let opts = Opt::from_args();
     let config = Rc::new(if opts.skip_config {
         config::Config::default_config()

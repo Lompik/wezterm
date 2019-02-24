@@ -34,7 +34,7 @@ pub fn keysym_to_keycode(keysym: u32) -> Option<KeyCode> {
         KEY_Tab => KeyCode::Tab,
 
         KEY_BackSpace => KeyCode::Backspace,
-        KEY_Return => KeyCode::Char(0xdu8 as char),
+        KEY_Return => KeyCode::Enter,
         KEY_Insert => KeyCode::Insert,
         KEY_Delete => KeyCode::Delete,
         KEY_Clear => KeyCode::Delete,
@@ -81,7 +81,7 @@ pub fn keysym_to_keycode(keysym: u32) -> Option<KeyCode> {
         KEY_F12 => KeyCode::Function(12),
 
         // numeric and function keypad keys
-        KEY_KP_Enter => KeyCode::Char(0xdu8 as char),
+        KEY_KP_Enter => KeyCode::Enter,
         KEY_KP_Delete => KeyCode::Delete,
         KEY_KP_Home => KeyCode::Home,
         KEY_KP_Page_Up => KeyCode::PageUp,

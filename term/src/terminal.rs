@@ -1,5 +1,5 @@
 use super::*;
-use termwiz::escape::parser::Parser;
+use self::terminalstate::Parser;
 use termwiz::hyperlink::Rule as HyperlinkRule;
 
 /// Represents the host of the terminal.
@@ -27,6 +27,9 @@ pub trait TerminalHost {
 
     /// Create a new tab in the current window
     fn new_tab(&mut self) {}
+
+    /// Create a new tab with the specified cmd
+    fn new_tab_with_cmd(&mut self, _cmd: &str, _args: &[&str], _stdin: bool) {}
 
     /// Switch to a specific tab
     fn activate_tab(&mut self, _tab: usize) {}
@@ -92,6 +95,8 @@ impl Terminal {
 
         let mut performer = Performer::new(&mut self.state, host);
 
-        self.parser.parse(bytes, |action| performer.perform(action));
+        for b in bytes {
+            self.parser.state_machine.advance(&mut performer, *b);
+        }
     }
 }

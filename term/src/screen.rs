@@ -572,7 +572,7 @@ impl Screen {
 
             x += print_width;
 
-            if x >= width && has_next && *g != ' ' {
+            if x >= width && has_next {
                 x = 0;
                 if yactual >= nswap+1 {
                     trace!("fill swapping: {}", yactual);
@@ -608,12 +608,12 @@ impl Screen {
                 //     trace!("fill_lines: {:?}", self.hlines[idx]);
                 // }
                 let mut nswap = 0;
-                for h in self.hline_mut(idx).line.clone().iter() { // [FIXME] clone
+                'hline: for h in self.hline_mut(idx).line.clone().iter() { // [FIXME] clone
                     let (nswap1, ydiff) = self.fill_line(&h.chars, &h.attrs, y, h.x.saturating_sub(nswap*width).max(h.x)); // [FIXME] hx<nswap*width with nswap >1
                     y = y.saturating_sub(nswap1);
                     nswap=nswap1;
                     if nswap != 0 && y==0 {
-                        return;
+                        break 'hline;
                     }
                 }
                 self.hlines[idx].is_dirty = false;

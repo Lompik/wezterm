@@ -222,11 +222,7 @@ impl Line {
             return;
         }
 
-<<<<<<< HEAD
-        for cell in &mut self.cells {
-=======
         for mut cell in self.cells.iter_mut() {
->>>>>>> 924f8e2... Overhaul cell/lines/screen structure
             let replace = match cell.attrs().hyperlink {
                 Some(ref link) if link.is_implicit() => Some(Cell::new_grapheme(
                     cell.str(),

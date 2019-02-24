@@ -272,18 +272,25 @@ impl GuiEventLoop {
     pub fn spawn_tab_with_cmd<T: AsRef<std::ffi::OsStr>>(&self, window_id: WindowId, cmd: &str, args: &[T], stdin: bool) -> Result<(), Error> {
         let mut windows = self.windows.borrow_mut();
 
-        let fd = {
-            let mut window = windows.by_id.get_mut(&window_id).ok_or_else(|| {
+        let (tab_id, fd) = {
+            let window = windows.by_id.get_mut(&window_id).ok_or_else(|| {
                 format_err!("no window_id {:?} in the windows_by_id map", window_id)
             })?;
+            let tab_id = window.spawn_tab_with_cmd(cmd, args, stdin)?;
+            let fd = window
+                .get_tabs()
+                .get_by_id(tab_id)
+                .unwrap()
+                .pty()
+                .as_raw_fd();
 
-            window.spawn_tab_with_cmd(cmd, args, stdin)?
+            (tab_id, fd)
         };
 
-        eprintln!("spawned new tab with fd = {}", fd);
+        trace!("spawned new tab with fd = {}", fd);
 
-        let entry = Rc::new(TabEntry { fd, window_id });
-        windows.by_fd.insert(fd, Rc::clone(&entry));
+        let entry = Rc::new(TabEntry { tab_id, fd, window_id});
+        windows.tab_by_id.insert(tab_id, Rc::clone(&entry));
         self.poll.register(
             &*entry,
             Token(fd as usize),

@@ -134,23 +134,6 @@ impl<'a> term::TerminalHost for TabHost<'a> {
             }));
     }
 
-    fn new_tab_with_cmd(&mut self, cmd: &str, args: &[&str], stdin: bool) {
-        let events = Rc::clone(&self.host.event_loop);
-        let window_id = self.host.window.window.window_id;
-
-        let args:Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
-        let cmd = cmd.to_owned();
-        self.host
-            .event_loop
-            .core
-            .spawn(futures::future::poll_fn(move || {
-                events
-                    .spawn_tab_with_cmd(window_id, &cmd, &args, stdin)
-                    .map(futures::Async::Ready)
-                    .map_err(|_| ())
-            }));
-    }
-
     fn activate_tab(&mut self, tab: usize) {
         self.with_window(move |win| win.activate_tab(tab))
     }
@@ -462,117 +445,48 @@ impl X11TerminalWindow {
         Ok(())
     }
 
-    pub fn spawn_tab(&mut self) -> Result<RawFd, Error> {
-        let rows = (self.height as usize + 1) / self.cell_height;
-        let cols = (self.width as usize + 1) / self.cell_width;
 
-        let (pty, slave) = pty::openpty(rows as u16, cols as u16, self.width, self.height)?;
-        let mut cmd = Command::new(get_shell()?);
-        cmd.env("TERM", &self.host.config.term);
+    pub fn spawn_tab_with_cmd<T: AsRef<std::ffi::OsStr>>(&mut self, cmd: &str, args: &[T], stdin: bool) -> Result<TabId, Error> {
+        use crate::pty::unix::openpty;
+        use std::process::Command;
+        let config = self.config();
 
-        let process = RefCell::new(slave.spawn_command(cmd)?);
-        eprintln!("spawned: {:?}", process);
+        let dims = self.get_dimensions();
 
-        let terminal = RefCell::new(term::Terminal::new(
-            rows,
-            cols,
-            self.host.config.scrollback_lines.unwrap_or(3500),
-            self.host.config.hyperlink_rules.clone(),
-        ));
+        let rows = (dims.height as usize + 1) / dims.cell_height;
+        let cols = (dims.width as usize + 1) / dims.cell_width;
 
-        let fd = pty.as_raw_fd();
-
-        let tab = Tab {
-            terminal,
-            process,
-            pty: RefCell::new(pty),
-        };
-
-        self.tabs.tabs.push(tab);
-        let len = self.tabs.tabs.len();
-        self.activate_tab(len - 1)?;
-
-        Ok(fd)
-    }
-
-    pub fn spawn_tab_with_cmd<T: AsRef<std::ffi::OsStr>>(&mut self, cmd: &str, args: &[T], stdin: bool) -> Result<RawFd, Error> {
-        let rows = (self.height as usize + 1) / self.cell_height;
-        let cols = (self.width as usize + 1) / self.cell_width;
-
-        let (pty, slave) = pty::openpty(rows as u16, cols as u16, self.width, self.height)?;
+        let (pty, slave) = openpty(rows as u16, cols as u16, self.width, self.height)?;
         let mut cmd = Command::new(cmd);
         let lines = {
-            let cur_tab = self.tabs.get_active();
-            let lines = cur_tab.terminal.borrow().lines_no_ansi();
+            let cur_tab = self.tabs.get_active().ok_or(format_err!("No current tab"))?;
+            let lines = cur_tab.terminal().lines_no_ansi();
             lines.join("\n")
         };
         cmd.args(args);
         cmd.env("TERM", &self.host.config.term);
 
-        let sp = dbg!(slave.spawn_command_with_stdin(cmd, &lines))?;
-        let process = RefCell::new(sp);
-        eprintln!("spawned: {:?}", process);
+        let process = dbg!(slave.spawn_command_with_stdin(cmd, &lines))?;
+        trace!("spawned: {:?}", process);
 
-        let terminal = RefCell::new(term::Terminal::new(
+        let terminal = term::Terminal::new(
             rows,
             cols,
             self.host.config.scrollback_lines.unwrap_or(3500),
             self.host.config.hyperlink_rules.clone(),
-        ));
+        );
 
-        let fd = pty.as_raw_fd();
 
-        let tab = Tab {
-            terminal,
-            process,
-            pty: RefCell::new(pty),
-        };
+        let tab = Tab::new(terminal, process, pty);
+        let tab_id = tab.tab_id();
 
-        self.tabs.tabs.push(tab);
-        let len = self.tabs.tabs.len();
+        self.get_tabs_mut().push(tab);
+        let len = self.get_tabs().len();
         self.activate_tab(len - 1)?;
 
-        Ok(fd)
+        self.tab_was_created(tab_id)?;
+
+        Ok(tab_id)
     }
 
-    pub fn close_tab_for_fd(&mut self, fd: RawFd) -> Result<(), Error> {
-        self.tabs.remove_tab_for_fd(fd);
-        self.update_title();
-        Ok(())
-    }
-
-    fn update_title(&mut self) {
-        let num_tabs = self.tabs.tabs.len();
-        let tab_no = self.tabs.active;
-
-        let terminal = self.tabs.get_active().terminal.borrow();
-
-        if num_tabs == 1 {
-            self.host.window.set_title(terminal.get_title());
-        } else {
-            self.host.window.set_title(&format!(
-                "[{}/{}] {}",
-                tab_no + 1,
-                num_tabs,
-                terminal.get_title()
-            ));
-        }
-    }
-
-    pub fn activate_tab(&mut self, tab: usize) -> Result<(), Error> {
-        let max = self.tabs.tabs.len();
-        if tab < max {
-            self.tabs.set_active(tab);
-            self.update_title();
-        }
-        Ok(())
-    }
-
-    pub fn activate_tab_relative(&mut self, delta: isize) -> Result<(), Error> {
-        let max = self.tabs.tabs.len();
-        let active = self.tabs.active as isize;
-        let tab = active + delta;
-        let tab = if tab < 0 { max as isize + tab } else { tab };
-        self.activate_tab(tab as usize % max)
-    }
 }

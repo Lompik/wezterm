@@ -519,7 +519,7 @@ fn test_hyperlinks() {
     let mut partial_line: Line = "wo00t".into();
     partial_line.set_cell(
         0,
-        Cell::new(
+        &Cell::new(
             'w',
             CellAttributes::default()
                 .set_hyperlink(Some(Rc::clone(&otherlink)))
@@ -528,7 +528,7 @@ fn test_hyperlinks() {
     );
     partial_line.set_cell(
         1,
-        Cell::new(
+        &Cell::new(
             'o',
             CellAttributes::default()
                 .set_hyperlink(Some(Rc::clone(&otherlink)))

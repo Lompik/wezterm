@@ -104,6 +104,9 @@ impl ScreenOrAlt {
     }
 
     pub fn activate_primary_screen(&mut self) {
+        for i in 0..self.screen.physical_rows{
+            self.screen.line_at(i).set_dirty();
+        }
         self.alt_screen_is_active = false;
     }
 
@@ -258,7 +261,7 @@ impl TerminalState {
                 if !s.is_empty() {
                     s.push('\n');
                 }
-                s.push_str(screen.lines[idx].columns_as_str(cols).trim_right());
+                s.push_str(screen.lines[idx].columns_as_str(cols).trim_end());
             }
         }
 
@@ -957,12 +960,14 @@ impl TerminalState {
     }
 
     /// Returns true if any of the visible lines are marked dirty
-    pub fn has_dirty_lines(&self) -> bool {
+    pub fn has_dirty_lines(&mut self) -> bool {
+        let offset = self.get_viewport_offset();
+        if ! self.screen.is_alt_screen_active(){
+            self.screen_mut().fill_lines(offset as i32);
+        }
         let screen = self.screen();
-        let height = screen.physical_rows;
-        let len = screen.lines.len() - self.viewport_offset as usize;
 
-        for line in screen.lines.iter().skip(len - height) {
+        for line in screen.lines.iter() {
             if line.is_dirty() {
                 return true;
             }
@@ -981,11 +986,9 @@ impl TerminalState {
 
         let screen = self.screen();
         let height = screen.physical_rows;
-        let len = screen.lines.len() - self.viewport_offset as usize;
 
         let selection = self.selection_range.map(|r| r.normalize());
-
-        for (i, line) in screen.lines.iter().skip(len - height).enumerate() {
+        for (i, mut line) in screen.lines.iter().enumerate() {
             if i >= height {
                 // When scrolling back, make sure we don't emit lines that
                 // are below the bottom of the viewport
@@ -1075,20 +1078,26 @@ impl TerminalState {
         self.clear_selection();
         let position = position.max(0);
 
+        let width = self.screen().physical_cols;
         let rows = self.screen().physical_rows;
-        let avail_scrollback = self.screen().lines.len() - rows;
+        let avail_scrollback = self.screen().hlines.len() - rows;
 
         let position = position.min(avail_scrollback as i64);
 
-        self.viewport_offset = position;
-        let top = self.screen().lines.len() - (rows + position as usize);
+        if self.viewport_offset != position {
+            for y in 0..rows{
+                self.screen_mut().line_at(y).resize_and_clear(width);
+            }
+        }
+        self.viewport_offset = dbg!(position);
+        let top = self.screen().hlines.len() - (rows + position as usize);
         {
             let screen = self.screen_mut();
             for y in top..top + rows {
-                screen.line_mut(y).set_dirty();
+                screen.hline_mut(y).set_dirty();
             }
         }
-        self.recompute_highlight();
+        //self.recompute_highlight();
     }
 
     /// Adjust the scroll position of the viewport by delta.
@@ -1448,9 +1457,14 @@ impl TerminalState {
         };
 
         {
+            let alt_screen = self.screen.is_alt_screen_active();
             let screen = self.screen_mut();
             for y in row_range.clone() {
-                screen.clear_line(y, col_range.clone(), &pen);
+                if alt_screen{
+                    screen.clear_line(y, col_range.clone(), &pen);
+                } else {
+                    screen.clear_line_hack(y, col_range.clone(), &pen);
+                }
             }
         }
 
@@ -1512,7 +1526,11 @@ impl TerminalState {
                     EraseInLine::EraseLine => 0..cols,
                 };
 
-                self.screen_mut().clear_line(cy, range.clone(), &pen);
+                if self.screen.is_alt_screen_active(){
+                    self.screen_mut().clear_line(cy, range.clone(), &pen);
+                } else {
+                    self.screen_mut().clear_line_hack(cy, range.clone(), &pen);
+                }
                 self.clear_selection_if_intersects(range, cy as ScrollbackOrVisibleRowIndex);
             }
             Edit::InsertCharacter(n) => {
@@ -1738,47 +1756,79 @@ impl<'a> Performer<'a> {
     }
 
     fn flush_print(&mut self) {
+        //self.flush_count = self.flush_count.wrapping_add(1);
+        // if self.flush_count % 10 != 0{
+        //     return
+        // }
         let p = match self.print.take() {
             Some(s) => s,
             None => return,
         };
+        let pen = self.pen.clone();
 
-        for g in unicode_segmentation::UnicodeSegmentation::graphemes(p.as_str(), true) {
+        //use std::iter::FromIterator;
+        let width = self.screen().physical_cols;
+        //let s = String::from_iter(p);
+
+        if self.screen.is_alt_screen_active() {
+        let mut it = p.iter();
+        while let Some(mut g) = it.next()  //unicode_segmentation::UnicodeSegmentation::graphemes(s.as_str(), true).map(|x| x.chars()).flatten()
+        {
             if self.wrap_next {
                 self.new_line(true);
+                self.wrap_next = false;
             }
 
-            let x = self.cursor.x;
             let y = self.cursor.y;
-            let width = self.screen().physical_cols;
+            let mut x = self.cursor.x;
 
-            let pen = self.pen.clone();
+            let mut print_width =0;
+            {let line = self.screen_mut().line_at(y as usize);
+
 
             // Assign the cell and extract its printable width
-            let print_width = {
-                let cell = self
-                    .screen_mut()
-                    .set_cell(x, y, &Cell::new_grapheme(g, pen.clone()));
-                // the max(1) here is to ensure that we advance to the next cell
+
+             let mut has_next = true;
+            while x+print_width < width && has_next{
+                x+=print_width;
+                let (_, pw) = line
+                    .update_or_set_cell(x, *g, pen.clone());
+                print_width = pw;
+                if let Some(g1) = it.next(){
+                    g = g1;
+                } else {
+                    has_next=false;
+                };
+            }
+}                // the max(1) here is to ensure that we advance to the next cell
+             self.cursor.x = x;
                 // position for zero-width graphemes.  We want to make sure that
                 // they occupy a cell so that we can re-emit them when we output them.
                 // If we didn't do this, then we'd effectively filter them out from
                 // the model, which seems like a lossy design choice.
-                cell.width().max(1)
-            };
+                // cell.width().max(1)
+                // width
+            //};
 
-            self.clear_selection_if_intersects(
-                x..x + print_width,
-                y as ScrollbackOrVisibleRowIndex,
-            );
+            // self.clear_selection_if_intersects(
+            //     x..x + print_width,
+            //     y as ScrollbackOrVisibleRowIndex,
+            // );
 
             if x + print_width < width {
                 self.cursor.x += print_width;
-                self.wrap_next = false;
             } else {
                 self.wrap_next = true;
             }
+        }} else {
+            let y = self.cursor.y;
+            let x = self.cursor.x;
+            let len = p.len();
+            self.screen_mut().hline_at(y).push(LineHisto::new(p, pen, x));
+            self.cursor.x = (x + len).min(width);
         }
+
+
     }
 
     pub fn perform(&mut self, action: Action) {

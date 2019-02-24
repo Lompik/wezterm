@@ -86,10 +86,10 @@ impl NamedFontImpl {
 
         // Some systems don't support this mode, so if it fails, we don't
         // care to abort the rest of what we're doing
-        match lib.set_lcd_filter(ftwrap::FT_LcdFilter::FT_LCD_FILTER_DEFAULT) {
-            Ok(_) => (),
-            Err(err) => eprintln!("Ignoring: FT_LcdFilter failed: {:?}", err),
-        };
+        // match lib.set_lcd_filter(ftwrap::FT_LcdFilter::FT_LCD_FILTER_DEFAULT) {
+        //     Ok(_) => (),
+        //     Err(err) => eprintln!("Ignoring: FT_LcdFilter failed: {:?}", err),
+        // };
 
         // Enable some filtering options and pull in the standard
         // fallback font selection from the user configuration

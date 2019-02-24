@@ -320,6 +320,11 @@ impl Window {
         })
     }
 
+    /// Change the class for the window manager
+    pub fn set_class(&self, class: &str, instance: &str) {
+        xcb_util::icccm::set_wm_class(self.conn.conn(), self.window.window_id, class, instance);
+    }
+
     /// Change the title for the window manager
     pub fn set_title(&self, title: &str) {
         xcb_util::icccm::set_wm_name(self.conn.conn(), self.window.window_id, title);

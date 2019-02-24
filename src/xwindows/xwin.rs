@@ -282,6 +282,7 @@ impl X11TerminalWindow {
 
         let window = Window::new(&event_loop.conn, width, height)?;
         window.set_title("wezterm");
+        window.set_class("Wezterm", "wezterm");
 
         let host = Host {
             window,

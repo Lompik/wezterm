@@ -363,11 +363,15 @@ void main() {
             }
         }
     } else {
-        color = texture(glyph_tex, tex_coords);
-        if (o_has_color == 0.0) {
-            // if it's not a color emoji, tint with the fg_color
-            //color = multiply(o_fg_color, color);
-            color.rgb = o_fg_color.rgb;
+        if (tex_coords.x == tex_coords.y && tex_coords.x==-1.0){
+            color = vec4(0.0, 0.0, 0.0, 0.0);
+        } else {
+            color = texture(glyph_tex, tex_coords);
+            if (o_has_color == 0.0) {
+                // if it's not a color emoji, tint with the fg_color
+                //color = multiply(o_fg_color, color);
+                color.rgb = o_fg_color.rgb;
+            }
         }
     }
 }
@@ -941,14 +945,14 @@ impl Renderer {
                         }
                         None => {
                             // Whitespace; no texture to render
-                            let zero = (0.0, 0.0f32);
+                            let minusone = (-1.0, -1.0f32);
 
                             // Note: these 0 coords refer to the blank pixel
                             // in the bottom left of the underline texture!
-                            vert[V_TOP_LEFT].tex = zero;
-                            vert[V_TOP_RIGHT].tex = zero;
-                            vert[V_BOT_LEFT].tex = zero;
-                            vert[V_BOT_RIGHT].tex = zero;
+                            vert[V_TOP_LEFT].tex = minusone;
+                            vert[V_TOP_RIGHT].tex = minusone;
+                            vert[V_BOT_LEFT].tex = minusone;
+                            vert[V_BOT_RIGHT].tex = minusone;
 
                             vert[V_TOP_LEFT].adjust = Default::default();
                             vert[V_TOP_RIGHT].adjust = Default::default();

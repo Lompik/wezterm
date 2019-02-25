@@ -544,17 +544,17 @@ impl Renderer {
             ((f64::from(metrics.descender)) / 64.0).floor() as isize
         };
 
-        self.glyph_cache.borrow_mut().clear();
-        self.atlas = RefCell::new(Atlas::new(facade, TEX_SIZE)?);
-        self.underline_tex =
-            Self::compute_underlines(facade, self.cell_width, self.cell_height, self.descender)?;
+        self.recreate_atlas(facade, TEX_SIZE)?;
+
         Ok(())
     }
 
     pub fn recreate_atlas<F: Facade>(&mut self, facade: &F, size: u32) -> Result<(), Error> {
-        let atlas = RefCell::new(Atlas::new(facade, size)?);
-        self.atlas = atlas;
         self.glyph_cache.borrow_mut().clear();
+        self.underline_tex =
+            Self::compute_underlines(facade, self.cell_width, self.cell_height, self.descender)?;
+        let atlas = Atlas::new(facade, size)?;
+        self.atlas.replace(atlas);
         Ok(())
     }
 

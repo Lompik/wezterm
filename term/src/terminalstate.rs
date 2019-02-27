@@ -211,7 +211,7 @@ impl TerminalState {
             saved_cursor: CursorPosition::default(),
             scroll_region: 0..physical_rows as VisibleRowIndex,
             wrap_next: false,
-            application_cursor_keys: true,
+            application_cursor_keys: false,
             application_keypad: false,
             bracketed_paste: false,
             sgr_mouse: false,

@@ -765,7 +765,7 @@ impl TerminalState {
                 host.toggle_full_screen();
                 return Ok(());
             }
-            (LeftTab, _,_,_,..) => "\x1b[Z",
+            (LeftTab, ..) | (Tab, _, _, SHIFT, ..) | (Char('\t'), _, _, SHIFT, ..) => "\x1b[Z",
             (Tab, ..) => "\t",
             (Enter, ..) => "\r",
             (Backspace, ..) => "\x08",

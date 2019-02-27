@@ -32,6 +32,7 @@ pub fn keysym_to_keycode(keysym: u32) -> Option<KeyCode> {
     let res = match keysym {
         KEY_Escape => KeyCode::Escape,
         KEY_Tab => KeyCode::Tab,
+        KEY_ISO_Left_Tab => KeyCode::LeftTab,
 
         KEY_BackSpace => KeyCode::Backspace,
         KEY_Return => KeyCode::Enter,

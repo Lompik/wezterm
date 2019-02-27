@@ -761,12 +761,13 @@ impl TerminalState {
 
         let to_send = match (key, ctrl, alt, shift, self.application_cursor_keys) {
             (Char('v'), _, ALT, _, _) => paste!(),
-            (Enter, _, ALT, ..) | (Char('\r'), _, ALT, ..) | (Char('\n'), _, ALT, ..) => {
+            (Char('\r'), _, ALT, ..) | (Char('\n'), _, ALT, ..) => {
                 host.toggle_full_screen();
                 return Ok(());
             }
             (LeftTab, ..) | (Tab, _, _, SHIFT, ..) | (Char('\t'), _, _, SHIFT, ..) => "\x1b[Z",
             (Tab, ..) => "\t",
+            (Enter, _, ALT, ..) => "\x1b\r",
             (Enter, ..) => "\r",
             (Backspace, ..) => "\x08",
             (Escape, ..) => "\x1b",

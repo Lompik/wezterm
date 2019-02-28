@@ -749,13 +749,20 @@ impl TerminalState {
 
         macro_rules! paste {
             () => {{
-                let clip = host.get_clipboard()?;
-                if self.bracketed_paste {
-                    write!(buf, "\x1b[200~{}\x1b[201~", clip)?;
-                } else {
-                    buf = clip;
+                match host.get_clipboard(){
+                    Ok(clip) => {
+                        if self.bracketed_paste {
+                            write!(buf, "\x1b[200~{}\x1b[201~", clip)?;
+                        } else {
+                            buf = clip;
+                        }
+                        buf.as_str()
+                    }
+                    Err(err) => {
+                        debug!("Could not get clipboard {:?}", err);
+                        return Ok(())
+                    }
                 }
-                buf.as_str()
             }};
         }
 
